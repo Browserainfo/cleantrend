@@ -24,7 +24,8 @@ import {
   Check,
   ShoppingBag,
   Scan,
-  LogOut
+  LogOut,
+  ClipboardList
 } from 'lucide-react';
 import { UserRole } from '../../types';
 
@@ -63,8 +64,8 @@ export const HeaderNav: React.FC = () => {
   };
 
   const handleEditF4Click = () => {
-    setActiveView('DROP');
-    showToast('Order editor active. Modify garments, delivery, or operational details.', 'info');
+    setActiveView('ORDERS');
+    showToast('Orders Management (F4) opened. Find and edit existing orders.', 'info');
   };
 
   return (
@@ -248,12 +249,26 @@ export const HeaderNav: React.FC = () => {
             <span>Customer</span>
           </button>
 
+          {/* Orders / Order Management */}
+          <button
+            id="menu-orders"
+            onClick={() => handleMenuClick('ORDERS')}
+            className={`px-3 py-1.5 rounded text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition ${
+              ['ORDERS', 'ORDER_LIST', 'ORDER_MANAGEMENT'].includes(activeView)
+                ? 'bg-sky-600 text-white shadow-2xs'
+                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            <ClipboardList className="w-4 h-4 text-amber-400" />
+            <span>Orders</span>
+          </button>
+
           {/* 2. Drop */}
           <button
             id="menu-drop"
             onClick={() => handleMenuClick('DROP')}
             className={`px-3 py-1.5 rounded text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition ${
-              ['DROP', 'ORDER_CREATE', 'ORDER_LIST'].includes(activeView)
+              ['DROP', 'ORDER_CREATE'].includes(activeView)
                 ? 'bg-sky-600 text-white shadow-2xs'
                 : 'text-slate-300 hover:bg-slate-800 hover:text-white'
             }`}

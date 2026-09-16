@@ -85,9 +85,29 @@ export const WhatsAppSimulator: React.FC<{ isOpen: boolean; onClose: () => void 
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!typedMessage.trim() || !activeOrder) return;
+    if (!typedMessage.trim()) return;
 
-    sendWhatsAppNotification('ORDER_UPDATED', activeOrder.id, typedMessage);
+    const messageToSend = typedMessage.trim();
+
+    // 1. Keep existing CRM message-saving behavior
+    if (activeOrder) {
+      sendWhatsAppNotification('ORDER_UPDATED', activeOrder.id, messageToSend);
+    }
+
+    // 2. Format customer's mobile number
+    const cleanDigits = (currentCustomer.mobile || '').replace(/\D/g, '');
+    const normalizedPhone = cleanDigits.length === 10 ? `91${cleanDigits}` : cleanDigits;
+
+    // 3. Open WhatsApp in new tab and show toast
+    if (normalizedPhone) {
+      const waUrl = `https://api.whatsapp.com/send?phone=${normalizedPhone}&text=${encodeURIComponent(messageToSend)}`;
+      window.open(waUrl, '_blank', 'noopener,noreferrer');
+      showToast(`Opening WhatsApp for ${currentCustomer.name} (+${normalizedPhone})...`, 'success');
+    } else {
+      showToast('Customer mobile number is missing or invalid.', 'error');
+    }
+
+    // 4. Clear input field
     setTypedMessage('');
   };
 

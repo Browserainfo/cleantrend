@@ -142,6 +142,8 @@ interface AppContextType {
   addCustomer: (cust: Partial<Customer>) => Customer;
   updateCustomer: (id: string, cust: Partial<Customer>) => Customer | null;
   updateOrder: (orderId: string, orderData: Partial<Order>) => { success: boolean; order?: Order; error?: string };
+  cancelOrder: (orderId: string, reason?: string) => { success: boolean; order?: Order; error?: string };
+  deleteOrder: (orderId: string, reason?: string) => { success: boolean; error?: string };
   
   // Helpers
   toastMessage: { text: string; type: 'success' | 'error' | 'info' | 'warning' } | null;
@@ -1743,6 +1745,96 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true, order: updatedOrder };
   };
 
+  const cancelOrder = (orderId: string, reason: string = 'Staff cancelled order') => {
+    const order = orders.find(o => o.id === orderId);
+    if (!order) return { success: false, error: 'Order not found' };
+
+    const updatedOrder: Order = {
+      ...order,
+      status: 'CANCELLED',
+      updatedAt: new Date().toISOString(),
+      updatedBy: `${authUserName} (${authUserRole})`
+    };
+
+    setOrders(prev => prev.map(o => o.id === orderId ? updatedOrder : o));
+
+    if (order.balanceDue > 0 && order.status !== 'CANCELLED') {
+      setCustomers(prev => prev.map(c => {
+        if (c.id !== order.customerId) return c;
+        return {
+          ...c,
+          outstandingAmount: Math.max(0, (c.outstandingAmount || 0) - order.balanceDue),
+          pendingOrdersCount: Math.max(0, (c.pendingOrdersCount || 0) - 1)
+        };
+      }));
+    }
+
+    addAuditLog({
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      action: 'ORDER_CANCEL',
+      changedBy: `${authUserName} (${authUserRole})`,
+      userRole: authUserRole,
+      fieldName: 'status',
+      previousValue: order.status,
+      newValue: 'CANCELLED',
+      reason
+    });
+
+    fetch('/api/orders', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      credentials: 'include',
+      body: JSON.stringify(updatedOrder)
+    }).catch(err => console.warn('Order cancel sync note:', err));
+
+    showToast(`Order #${order.orderNumber} has been cancelled.`, 'info');
+    return { success: true, order: updatedOrder };
+  };
+
+  const deleteOrder = (orderId: string, reason: string = 'Staff deleted order') => {
+    const order = orders.find(o => o.id === orderId);
+    if (!order) return { success: false, error: 'Order not found' };
+
+    setOrders(prev => prev.filter(o => o.id !== orderId));
+    if (activeOrderId === orderId) {
+      setActiveOrderId('');
+    }
+
+    if (order.balanceDue > 0 && order.status !== 'CANCELLED') {
+      setCustomers(prev => prev.map(c => {
+        if (c.id !== order.customerId) return c;
+        return {
+          ...c,
+          outstandingAmount: Math.max(0, (c.outstandingAmount || 0) - order.balanceDue),
+          pendingOrdersCount: Math.max(0, (c.pendingOrdersCount || 0) - 1),
+          totalOrdersCount: Math.max(0, (c.totalOrdersCount || 1) - 1)
+        };
+      }));
+    }
+
+    addAuditLog({
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      action: 'ORDER_DELETE',
+      changedBy: `${authUserName} (${authUserRole})`,
+      userRole: authUserRole,
+      fieldName: 'order',
+      previousValue: `Order #${order.orderNumber}`,
+      newValue: 'DELETED',
+      reason
+    });
+
+    fetch(`/api/orders/${order.id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+      credentials: 'include'
+    }).catch(err => console.warn('Order delete sync note:', err));
+
+    showToast(`Order #${order.orderNumber} deleted permanently.`, 'warning');
+    return { success: true };
+  };
+
   const resetToDefaults = () => {
     localStorage.clear();
     setBusinessSettings(initialBusinessSettings);
@@ -1833,6 +1925,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       addCustomer,
       updateCustomer,
       updateOrder,
+      cancelOrder,
+      deleteOrder,
       toastMessage,
       showToast,
       hideToast,

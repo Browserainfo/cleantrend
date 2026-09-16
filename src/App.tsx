@@ -20,6 +20,7 @@ import { AccountScreen } from './components/account/AccountScreen';
 import { ReportsScreen } from './components/reports/ReportsScreen';
 import { MasterDataScreen } from './components/master/MasterDataScreen';
 import { AdminScreen } from './components/admin/AdminScreen';
+import { OrderManagementScreen } from './components/orders/OrderManagementScreen';
 
 // Secondary Modals & Interactive Simulators
 import { BusinessSettingsModal } from './components/settings/BusinessSettingsModal';
@@ -118,7 +119,8 @@ const MainAppContent: React.FC = () => {
       <main className="flex-1 flex flex-col overflow-hidden">
         {activeView === 'HOME' && <HomeScreen />}
         {(activeView === 'CUSTOMER' || activeView === 'CUSTOMERS') && <CustomerScreen />}
-        {(activeView === 'DROP' || activeView === 'ORDER_CREATE' || activeView === 'ORDER_LIST') && <DropScreen />}
+        {(activeView === 'ORDERS' || activeView === 'ORDER_LIST' || activeView === 'ORDER_MANAGEMENT') && <OrderManagementScreen />}
+        {(activeView === 'DROP' || activeView === 'ORDER_CREATE') && <DropScreen />}
         {(activeView === 'PROCESS' || activeView === 'PRINT_QR_TAGS' || activeView === 'PENDING_FINISHING' || activeView === 'PACKING_STICKERS' || activeView === 'WORKSHOP_NOTES') && <ProcessScreen />}
         {(activeView === 'PICKUP' || activeView === 'DELIVERY') && <DeliveryScreen />}
         {activeView === 'ACCOUNT' && <AccountScreen />}

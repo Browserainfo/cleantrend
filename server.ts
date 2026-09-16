@@ -976,6 +976,18 @@ app.post('/api/orders', requireAuth, (req, res) => {
   res.json({ success: true, order: newOrder });
 });
 
+// DELETE order - requires authenticated staff
+app.delete('/api/orders/:id', requireAuth, (req, res) => {
+  const orderId = req.params.id;
+  const initialLen = db.orders.length;
+  db.orders = db.orders.filter(o => o.id !== orderId && String(o.orderNumber) !== orderId);
+  if (db.orders.length < initialLen) {
+    saveDatabase();
+    return res.json({ success: true, message: 'Order deleted' });
+  }
+  return res.status(404).json({ success: false, error: 'Order not found' });
+});
+
 // GET & POST Customers - requires authenticated staff (Admin or Manager)
 app.get('/api/customers', requireAuth, (req, res) => {
   res.json({ success: true, customers: db.customers });

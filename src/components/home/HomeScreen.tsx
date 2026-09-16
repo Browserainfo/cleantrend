@@ -522,6 +522,7 @@ export const HomeScreen: React.FC = () => {
                             </button>
                             <button
                               onClick={() => {
+                                setActiveCustomerId(c.id);
                                 setActiveView('CUSTOMER');
                                 showToast(`Selected customer ${c.name} in Customer Directory`, 'info');
                               }}

@@ -115,7 +115,8 @@ export const ThermalReceiptModal: React.FC<{ isOpen: boolean; onClose: () => voi
     onClose();
   };
 
-  const maskPhone = (phone: string) => {
+  const maskPhone = (phone?: string) => {
+    if (!phone) return '';
     if (!businessSettings.maskPhoneOnThermalReceipt) return phone;
     if (phone.length <= 4) return phone;
     return '••••••' + phone.slice(-4);
@@ -244,11 +245,11 @@ export const ThermalReceiptModal: React.FC<{ isOpen: boolean; onClose: () => voi
                 <span>Amount</span>
               </div>
 
-              {order.items.map((item, idx) => (
+              {order.items?.map((item, idx) => (
                 <div key={item.id} className="space-y-0.5">
                   <div className="flex justify-between font-bold">
                     <span>{idx + 1}. {item.garmentName}</span>
-                    <span>{item.totalItemPrice.toFixed(2)}</span>
+                    <span>{(Number(item.totalItemPrice) || 0).toFixed(2)}</span>
                   </div>
                   <div className="text-[9.5px] text-slate-700 pl-3 font-semibold">
                     {item.serviceName} • <span className="text-indigo-900 font-extrabold">{item.pressingMethod || 'Iron Press'}</span>
@@ -271,47 +272,47 @@ export const ThermalReceiptModal: React.FC<{ isOpen: boolean; onClose: () => voi
             <div className="space-y-1 text-[10px] border-b border-slate-800 pb-2">
               <div className="flex justify-between text-slate-600">
                 <span>Total Pieces / Weight:</span>
-                <span className="font-bold">{order.totalPieces} Pcs {order.totalWeightKg ? `(${order.totalWeightKg} kg)` : ''}</span>
+                <span className="font-bold">{order.totalPieces || (order.items ? order.items.reduce((s, i) => s + (i.quantity || 1), 0) : 1)} Pcs {order.totalWeightKg ? `(${order.totalWeightKg} kg)` : ''}</span>
               </div>
               <div className="flex justify-between text-slate-600">
                 <span>Items Subtotal:</span>
-                <span>{order.grossAmount.toFixed(2)}</span>
+                <span>{(Number(order.grossAmount) || 0).toFixed(2)}</span>
               </div>
               {order.deliveryCharge && order.deliveryCharge > 0 ? (
                 <div className="flex justify-between text-indigo-700 font-semibold">
                   <span>Delivery / Pick&Drop Charge:</span>
-                  <span>+{order.deliveryCharge.toFixed(2)}</span>
+                  <span>+{(Number(order.deliveryCharge) || 0).toFixed(2)}</span>
                 </div>
               ) : null}
               {order.surchargeAmount && order.surchargeAmount > 0 ? (
                 <div className="flex justify-between text-amber-700 font-semibold">
                   <span>Surcharge ({order.surchargeType}):</span>
-                  <span>+{order.surchargeAmount.toFixed(2)}</span>
+                  <span>+{(Number(order.surchargeAmount) || 0).toFixed(2)}</span>
                 </div>
               ) : null}
               {order.discountAmount && order.discountAmount > 0 ? (
                 <div className="flex justify-between text-rose-600 font-semibold">
                   <span>Discount ({order.discountPercent}%):</span>
-                  <span>-{order.discountAmount.toFixed(2)}</span>
+                  <span>-{(Number(order.discountAmount) || 0).toFixed(2)}</span>
                 </div>
               ) : null}
-              {order.roundOff !== 0 && (
+              {order.roundOff != null && Number(order.roundOff) !== 0 && (
                 <div className="flex justify-between text-slate-600">
                   <span>Round Off:</span>
-                  <span>{order.roundOff.toFixed(2)}</span>
+                  <span>{Number(order.roundOff).toFixed(2)}</span>
                 </div>
               )}
               <div className="flex justify-between font-bold text-slate-900 border-t border-slate-300 pt-0.5">
                 <span>Net Amount:</span>
-                <span>Rs. {order.netAmount.toFixed(2)}</span>
+                <span>Rs. {(Number(order.netAmount) || 0).toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-slate-600">
                 <span>Advance Paid:</span>
-                <span>{order.advancePaid.toFixed(2)}</span>
+                <span>{(Number(order.advancePaid) || 0).toFixed(2)}</span>
               </div>
               <div className="flex justify-between font-black text-xs text-slate-950 border-t border-slate-800 pt-1">
                 <span>Balance Due:</span>
-                <span>Rs. {order.balanceDue.toFixed(2)}</span>
+                <span>Rs. {(Number(order.balanceDue) || 0).toFixed(2)}</span>
               </div>
             </div>
 

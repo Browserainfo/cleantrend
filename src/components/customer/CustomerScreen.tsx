@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { 
   Users, 
@@ -29,6 +29,7 @@ export const CustomerScreen: React.FC = () => {
     orders, 
     setActiveOrderId, 
     setActiveView, 
+    activeCustomerId,
     setActiveCustomerId,
     setWhatsAppSimulatorOpen, 
     showToast,
@@ -36,9 +37,19 @@ export const CustomerScreen: React.FC = () => {
   } = useApp();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string>(customers[0]?.id || '');
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>(activeCustomerId || customers[0]?.id || '');
   const [isNewCustModalOpen, setIsNewCustModalOpen] = useState(false);
   const [isEditCustModalOpen, setIsEditCustModalOpen] = useState(false);
+
+  // Sync selectedCustomerId with activeCustomerId if changed externally
+  useEffect(() => {
+    if (activeCustomerId && activeCustomerId !== selectedCustomerId) {
+      const exists = customers.some(c => c.id === activeCustomerId);
+      if (exists) {
+        setSelectedCustomerId(activeCustomerId);
+      }
+    }
+  }, [activeCustomerId, customers]);
 
   // New Customer Form State
   const [newCustName, setNewCustName] = useState('');
@@ -66,8 +77,11 @@ export const CustomerScreen: React.FC = () => {
     c.address.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const selectedCustomer = customers.find(c => c.id === selectedCustomerId) || customers[0];
-  const customerOrders = orders.filter(o => o.customerId === selectedCustomer?.id);
+  const selectedCustomer = (selectedCustomerId ? customers.find(c => c.id === selectedCustomerId) : undefined)
+    || (activeCustomerId ? customers.find(c => c.id === activeCustomerId) : undefined)
+    || (customers.length > 0 ? customers[0] : null);
+
+  const customerOrders = selectedCustomer ? orders.filter(o => o.customerId === selectedCustomer.id) : [];
 
   const handleCreateCustomer = (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,6 +104,7 @@ export const CustomerScreen: React.FC = () => {
     });
 
     setSelectedCustomerId(created.id);
+    setActiveCustomerId(created.id);
     setIsNewCustModalOpen(false);
     showToast(`Customer ${created.name} (${normalizedPhone}) created successfully.`, 'success');
 
@@ -103,9 +118,12 @@ export const CustomerScreen: React.FC = () => {
   };
 
   const handleOpenEditCustomer = (cust: Customer) => {
+    if (!cust) return;
+    setSelectedCustomerId(cust.id);
+    setActiveCustomerId(cust.id);
     setEditCustId(cust.id);
-    setEditCustName(cust.name);
-    setEditCustMobile(cust.mobile);
+    setEditCustName(cust.name || '');
+    setEditCustMobile(cust.mobile || '');
     setEditCustEmail(cust.email || '');
     setEditCustAddress(cust.address || '');
     setEditCustArea(cust.area || '');
@@ -133,7 +151,10 @@ export const CustomerScreen: React.FC = () => {
     });
 
     if (res) {
+      setSelectedCustomerId(res.id);
+      setActiveCustomerId(res.id);
       setIsEditCustModalOpen(false);
+      showToast(`Customer ${res.name} updated successfully.`, 'success');
     }
   };
 
@@ -192,11 +213,14 @@ export const CustomerScreen: React.FC = () => {
           {/* List */}
           <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
             {filteredCustomers.map(cust => {
-              const isSelected = cust.id === selectedCustomerId;
+              const isSelected = cust.id === (selectedCustomer?.id || selectedCustomerId);
               return (
                 <div
                   key={cust.id}
-                  onClick={() => setSelectedCustomerId(cust.id)}
+                  onClick={() => {
+                    setSelectedCustomerId(cust.id);
+                    setActiveCustomerId(cust.id);
+                  }}
                   className={`p-3.5 cursor-pointer transition flex flex-col gap-1.5 ${
                     isSelected ? 'bg-sky-50 border-l-4 border-sky-600' : 'hover:bg-slate-50'
                   }`}
@@ -208,15 +232,29 @@ export const CustomerScreen: React.FC = () => {
                         {cust.custCode}
                       </span>
                     </div>
-                    {cust.outstandingAmount > 0 ? (
-                      <span className="text-[11px] font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
-                        Due: ₹{cust.outstandingAmount.toFixed(0)}
-                      </span>
-                    ) : (
-                      <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                        Settled
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1.5">
+                      {cust.outstandingAmount > 0 ? (
+                        <span className="text-[11px] font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
+                          Due: ₹{cust.outstandingAmount.toFixed(0)}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                          Settled
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenEditCustomer(cust);
+                        }}
+                        className="px-2 py-0.5 bg-slate-100 hover:bg-sky-100 text-slate-600 hover:text-sky-700 rounded text-[10px] font-bold border border-slate-200 flex items-center gap-1 transition"
+                        title={`Edit ${cust.name}`}
+                      >
+                        <Edit className="w-3 h-3" />
+                        <span>Edit</span>
+                      </button>
+                    </div>
                   </div>
 
                   <div className="text-[11px] text-slate-600 flex items-center gap-2">

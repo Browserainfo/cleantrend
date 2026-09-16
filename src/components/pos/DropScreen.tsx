@@ -39,7 +39,8 @@ import {
   ChevronUp,
   AlertCircle,
   Check,
-  Edit3
+  Edit3,
+  ClipboardList
 } from 'lucide-react';
 import { 
   GarmentMaster, 
@@ -636,70 +637,91 @@ export const DropScreen: React.FC = () => {
 
   // Save Order
   const handleSaveOrder = () => {
-    if (!pickAndDropType) {
-      showToast('Please select a Delivery Option (Store Counter, Home Delivery, or Pick & Drop) first.', 'warning');
-      return;
-    }
+    try {
+      const targetCustomer = selectedCustomer || (selectedCustomerId ? customers.find(c => c.id === selectedCustomerId) : undefined) || customers[0];
+      if (!targetCustomer) {
+        showToast('Please select or create a customer before saving the order.', 'warning');
+        return;
+      }
 
-    if (items.length === 0) {
-      showToast('Please add at least one garment or weight package to the order before saving.', 'warning');
-      return;
-    }
+      if (!pickAndDropType) {
+        showToast('Please select a Delivery Option (Store Counter, Home Delivery, or Pick & Drop) first.', 'warning');
+        return;
+      }
 
-    const effectiveDiffAction = (advancePaid > 0 && advanceDiff > 0 && advanceDiffOption) ? advanceDiffOption : undefined;
-    const effectiveDiffAmount = effectiveDiffAction ? advanceDiff : undefined;
+      if (items.length === 0) {
+        showToast('Please add at least one garment or weight package to the order before saving.', 'warning');
+        return;
+      }
 
-    const res = createOrder({
-      customerId: selectedCustomer.id,
-      orderType,
-      items,
-      totalPieces: totalPiecesCount,
-      totalWeightKg: totalWeightKg,
-      deliveryCharge: effectiveDeliveryCharge,
-      hasDeliveryCharge: isDeliveryApplied,
-      isPickAndDrop: pickAndDropType === 'DOORSTEP_PICK_DROP',
-      pickAndDropType: pickAndDropType || 'COUNTER_WALKIN',
-      surchargeType,
-      surchargeAmount: calculatedSurcharge,
-      discountPercent,
-      discountAmount: calculatedDiscount,
-      discountReason: discountReason || undefined,
-      taxAmount: 0,
-      grossAmount,
-      netAmount: roundedTotal,
-      advancePaid: advancePaid,
-      paidAmount: advancePaid,
-      balanceAmount: balanceDue,
-      adjustmentApplied: effectiveAdjustment > 0 ? effectiveAdjustment : undefined,
-      differenceAction: effectiveDiffAction,
-      differenceAmount: effectiveDiffAmount,
-      paymentStatus: (advancePaid >= roundedTotal || (advancePaid > 0 && effectiveDiffAction)) ? 'PAID' : advancePaid > 0 ? 'PARTIAL' : 'PENDING',
-      advancePaymentMethod,
-      workshopNotes,
-      deliveryNotes,
-      deliveryDate: selectedDueDate.toISOString().split('T')[0]
-    } as any);
+      let formattedDueDate = new Date().toISOString().split('T')[0];
+      try {
+        if (selectedDueDate instanceof Date && !isNaN(selectedDueDate.getTime())) {
+          formattedDueDate = selectedDueDate.toISOString().split('T')[0];
+        }
+      } catch {
+        formattedDueDate = new Date().toISOString().split('T')[0];
+      }
 
-    if (res.success) {
-      const orderNo = res.order?.orderNumber || 'New';
-      showToast(`Order #${orderNo} successfully created for ${selectedCustomer.name}!`, 'success');
-      // Reset cart and draft inputs
-      setItems([]);
-      setAdvancePaid(0);
-      setDiscountPercent(0);
-      setDiscountReason('');
-      setWorkshopNotes('');
-      setDeliveryNotes('');
-      setSurchargeType('NONE');
-      setHasDeliveryCharge(false);
-      setPickAndDropType(null); // Reset delivery option for next order
-      setAdvanceDiffOption(null);
-      setApplyAdjustment(true);
-      
-      // Open thermal receipt modal automatically for immediate printing
-      setThermalReceiptModalOpen(true);
-    } else {
-      showToast(res.error || res.message || 'Failed to create order. Please check inputs.', 'error');
+      const effectiveDiffAction = (advancePaid > 0 && advanceDiff > 0 && advanceDiffOption) ? advanceDiffOption : undefined;
+      const effectiveDiffAmount = effectiveDiffAction ? advanceDiff : undefined;
+
+      const res = createOrder({
+        customerId: targetCustomer.id,
+        orderType,
+        items,
+        totalPieces: totalPiecesCount,
+        totalWeightKg: totalWeightKg,
+        deliveryCharge: effectiveDeliveryCharge,
+        hasDeliveryCharge: isDeliveryApplied,
+        isPickAndDrop: pickAndDropType === 'DOORSTEP_PICK_DROP',
+        pickAndDropType: pickAndDropType || 'COUNTER_WALKIN',
+        surchargeType,
+        surchargeAmount: calculatedSurcharge,
+        discountPercent,
+        discountAmount: calculatedDiscount,
+        discountReason: discountReason || undefined,
+        taxAmount: 0,
+        grossAmount,
+        netAmount: roundedTotal,
+        advancePaid: advancePaid,
+        paidAmount: advancePaid,
+        balanceAmount: balanceDue,
+        adjustmentApplied: effectiveAdjustment > 0 ? effectiveAdjustment : undefined,
+        differenceAction: effectiveDiffAction,
+        differenceAmount: effectiveDiffAmount,
+        paymentStatus: (advancePaid >= roundedTotal || (advancePaid > 0 && effectiveDiffAction)) ? 'PAID' : advancePaid > 0 ? 'PARTIAL' : 'PENDING',
+        advancePaymentMethod,
+        workshopNotes,
+        deliveryNotes,
+        dueDate: formattedDueDate,
+        deliveryDate: formattedDueDate
+      } as any);
+
+      if (res && res.success) {
+        const orderNo = res.order?.orderNumber || 'New';
+        showToast(`Order #${orderNo} successfully created for ${targetCustomer.name}!`, 'success');
+        // Reset cart and draft inputs
+        setItems([]);
+        setAdvancePaid(0);
+        setDiscountPercent(0);
+        setDiscountReason('');
+        setWorkshopNotes('');
+        setDeliveryNotes('');
+        setSurchargeType('NONE');
+        setHasDeliveryCharge(false);
+        setPickAndDropType(null); // Reset delivery option for next order
+        setAdvanceDiffOption(null);
+        setApplyAdjustment(true);
+        
+        // Open thermal receipt modal automatically for immediate printing
+        setThermalReceiptModalOpen(true);
+      } else {
+        showToast(res?.error || res?.message || 'Failed to create order. Please check inputs.', 'error');
+      }
+    } catch (saveError: any) {
+      console.error('Error during order creation:', saveError);
+      showToast(saveError?.message || 'Unexpected error occurred while creating order.', 'error');
     }
   };
 
@@ -721,15 +743,25 @@ export const DropScreen: React.FC = () => {
           </div>
         </div>
 
-        {/* Keyboard Shortcuts Hint Bar */}
-        <div className="hidden sm:flex items-center gap-2 text-[11px] font-mono font-medium text-slate-600 bg-slate-100 px-3 py-1 rounded-md border border-slate-200">
-          <span className="bg-white px-1.5 py-0.5 rounded border border-slate-300 font-bold text-slate-800">F2</span> Search Cust
-          <span className="text-slate-300">|</span>
-          <span className="bg-white px-1.5 py-0.5 rounded border border-slate-300 font-bold text-slate-800">F4</span> Price Check
-          <span className="text-slate-300">|</span>
-          <span className="bg-white px-1.5 py-0.5 rounded border border-slate-300 font-bold text-slate-800">F12</span> Create Order
-          <span className="text-slate-300">|</span>
-          <span className="bg-white px-1.5 py-0.5 rounded border border-slate-300 font-bold text-slate-800">Ctrl+H</span> Cust List
+        <div className="flex items-center gap-2">
+          {/* Keyboard Shortcuts Hint Bar */}
+          <div className="hidden sm:flex items-center gap-2 text-[11px] font-mono font-medium text-slate-600 bg-slate-100 px-3 py-1 rounded-md border border-slate-200">
+            <span className="bg-white px-1.5 py-0.5 rounded border border-slate-300 font-bold text-slate-800">F2</span> Search Cust
+            <span className="text-slate-300">|</span>
+            <span className="bg-white px-1.5 py-0.5 rounded border border-slate-300 font-bold text-slate-800">F4</span> Orders
+            <span className="text-slate-300">|</span>
+            <span className="bg-white px-1.5 py-0.5 rounded border border-slate-300 font-bold text-slate-800">F12</span> Create Order
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setActiveView('ORDERS')}
+            className="px-3 py-1 bg-slate-100 hover:bg-sky-50 text-slate-700 hover:text-sky-700 rounded text-xs font-bold flex items-center gap-1.5 border border-slate-300 transition"
+            title="View & manage all existing orders"
+          >
+            <ClipboardList className="w-3.5 h-3.5 text-slate-600" />
+            <span>Manage Orders</span>
+          </button>
         </div>
       </div>
 
