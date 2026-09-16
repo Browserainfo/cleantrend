@@ -1,0 +1,6 @@
+{
+  "name": "Cleanera Dry Cleaning CRM",
+  "description": "Comprehensive CRM and operations management platform for Trendera Dry Cleaners, featuring secure authentication, role-based anti-fraud controls, and end-to-end garment workflow tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
