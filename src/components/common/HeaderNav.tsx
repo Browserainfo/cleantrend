@@ -47,7 +47,8 @@ export const HeaderNav: React.FC = () => {
     setPriceCorrectionModalOpen,
     whatsAppMessages,
     showToast,
-    resetToDefaults
+    resetToDefaults,
+    setActiveOrderId
   } = useApp();
 
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
@@ -60,10 +61,14 @@ export const HeaderNav: React.FC = () => {
       return;
     }
     setActiveDropdown(null);
+    if (['ORDERS', 'ORDER_LIST', 'ORDER_MANAGEMENT'].includes(viewName)) {
+      setActiveOrderId('');
+    }
     setActiveView(viewName);
   };
 
   const handleEditF4Click = () => {
+    setActiveOrderId('');
     setActiveView('ORDERS');
     showToast('Orders Management (F4) opened. Find and edit existing orders.', 'info');
   };

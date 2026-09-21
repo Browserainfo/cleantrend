@@ -259,7 +259,7 @@
     }
   ],
   "settings": {
-    "businessName": "Trendera Dry Cleaning CRM",
+    "businessName": "Trendera Dry Cleaning",
     "displayName": "Trendera Dry Cleaning - Noida",
     "legalName": "Trendera Services Private Limited",
     "branchName": "C2 Sector 1 Noida",
@@ -290,7 +290,8 @@
     "paymentQrUrl": "/payment-qr.jpg",
     "upiId": "9041590866@hdfc",
     "upiPayeeName": "PRITPAL SINGH",
-    "includeQrInWhatsApp": true
+    "includeQrInWhatsApp": false,
+    "storeName": "Trendera"
   },
   "users": [
     {
@@ -310,7 +311,7 @@
       "avatarInitial": "A",
       "createdAt": "2026-09-09T13:00:22.960Z",
       "updatedAt": "2026-09-09T13:00:22.960Z",
-      "lastLoginAt": "2026-09-09T13:00:26.672Z"
+      "lastLoginAt": "2026-09-19T11:12:38.611Z"
     },
     {
       "id": "usr-manager-1",
@@ -371,6 +372,13 @@
       "username": "rajesh",
       "createdAt": "2026-09-09T13:00:30.689Z",
       "expiresAt": "2026-09-16T13:00:30.689Z"
+    },
+    "0c95d408c759d237c98b4d38aaca39e5d546d50102c41214cc3f0fc47300e99f": {
+      "userId": "usr-admin-1",
+      "role": "ADMIN",
+      "username": "admin",
+      "createdAt": "2026-09-19T11:12:38.611Z",
+      "expiresAt": "2026-09-26T11:12:38.611Z"
     }
   }
 }

@@ -405,7 +405,7 @@ export const WhatsAppSimulator: React.FC<{ isOpen: boolean; onClose: () => void 
                       </div>
 
                       {/* Attached Payment QR / Scanner Image (Single communication delivery) */}
-                      {(msg.mediaUrl || msg.qrImageUrl) && (
+                      {msg.triggerType !== 'ORDER_CREATED' && (msg.mediaUrl || msg.qrImageUrl) && (
                         <div className="my-2 p-2.5 bg-[#025142] rounded-lg border border-[#046a57] shadow-inner space-y-2">
                           <div className="flex items-center justify-between text-[11px] font-bold text-emerald-200">
                             <span className="flex items-center gap-1.5">

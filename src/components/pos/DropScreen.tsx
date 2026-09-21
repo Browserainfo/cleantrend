@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { 
   ShoppingBag, 
@@ -49,6 +49,7 @@ import {
   OrderGarmentItem, 
   OrderType, 
   Customer,
+  Order,
   GarmentCategory,
   PressingMethod,
   DEFAULT_PRESSING_METHOD,
@@ -90,8 +91,8 @@ const WEIGHT_SERVICES = [
     code: 'WSI' as const,
     name: 'Wash & Steam Iron (WSI)',
     shortName: 'Wash & Steam Iron',
-    ratePerKg: 75,
-    description: 'Hygienic wash + professional steam ironing (₹75 × Weight)',
+    ratePerKg: 125,
+    description: 'Hygienic wash + professional steam ironing (₹125 × Weight)',
     defaultPressing: 'Steam Press',
     colorClass: 'text-amber-700',
     bgLightClass: 'bg-amber-50/70 border-amber-200',
@@ -101,8 +102,8 @@ const WEIGHT_SERVICES = [
     code: 'WF' as const,
     name: 'Wash & Fold (WF)',
     shortName: 'Wash & Fold',
-    ratePerKg: 125,
-    description: 'Daily wear wash, tumble dry & crisp folding (₹125 × Weight)',
+    ratePerKg: 75,
+    description: 'Daily wear wash, tumble dry & crisp folding (₹75 × Weight)',
     defaultPressing: 'Fold Only',
     colorClass: 'text-emerald-700',
     bgLightClass: 'bg-emerald-50/70 border-emerald-200',
@@ -146,9 +147,17 @@ const CATEGORY_TABS: { id: GarmentCategory; label: string; icon: React.Component
 export const DropScreen: React.FC = () => {
   const { 
     customers, 
+    orders,
     currentUser, 
     currentRole, 
     createOrder, 
+    updateOrder,
+    editingOrderId,
+    setEditingOrderId,
+    editingOrderData,
+    setEditingOrderData,
+    cancelEditingOrder,
+    setActiveOrderId,
     businessSettings, 
     setThermalReceiptModalOpen,
     setQRTagPreviewModalOpen,
@@ -159,14 +168,27 @@ export const DropScreen: React.FC = () => {
     setActiveCustomerId
   } = useApp();
 
+  const editingOrder = useMemo(() => {
+    if (editingOrderData) return editingOrderData;
+    if (!editingOrderId) return null;
+    return orders.find(o => 
+      o.id === editingOrderId || 
+      String(o.orderNumber) === String(editingOrderId) || 
+      o.id === `ord-${editingOrderId}`
+    ) || null;
+  }, [editingOrderId, editingOrderData, orders]);
+
   // 1. Customer Selection State
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string>(activeCustomerId || customers[0]?.id || '');
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>(() => {
+    if (editingOrderData?.customerId) return editingOrderData.customerId;
+    return activeCustomerId || customers[0]?.id || '';
+  });
   
   useEffect(() => {
-    if (activeCustomerId) {
+    if (activeCustomerId && !editingOrderId && !editingOrderData) {
       setSelectedCustomerId(activeCustomerId);
     }
-  }, [activeCustomerId]);
+  }, [activeCustomerId, editingOrderId, editingOrderData]);
   const [customerSearchQuery, setCustomerSearchQuery] = useState('');
   const [isCustomerDropdownOpen, setIsCustomerDropdownOpen] = useState(false);
 
@@ -189,7 +211,8 @@ export const DropScreen: React.FC = () => {
 
   // 6. Delivery & Pickup Options (Inactive by default until manager selects)
   const [hasDeliveryCharge, setHasDeliveryCharge] = useState<boolean>(false);
-  const [deliveryChargeAmount, setDeliveryChargeAmount] = useState<number>(50);
+  const [homeDeliveryCharge, setHomeDeliveryCharge] = useState<number>(50);
+  const [pickDropCharge, setPickDropCharge] = useState<number>(50);
   const [pickAndDropType, setPickAndDropType] = useState<'COUNTER_WALKIN' | 'HOME_DELIVERY' | 'DOORSTEP_PICK_DROP' | null>(null);
 
   // 7. Surcharges, Discounts, Advance, Notes
@@ -204,6 +227,41 @@ export const DropScreen: React.FC = () => {
   // 8. Payment Difference & Customer Adjustment Balance
   const [applyAdjustment, setApplyAdjustment] = useState<boolean>(true);
   const [advanceDiffOption, setAdvanceDiffOption] = useState<'WAIVE' | 'CARRY_FORWARD' | null>(null);
+
+  // Top-Up / Sub-Service Rates & Configuration
+  const [topUpRates, setTopUpRates] = useState<Record<string, number>>(() => {
+    try {
+      const saved = localStorage.getItem('trendera_topup_rates');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return {
+      ST: 50,
+      SP: 50,
+      ALT: 40
+    };
+  });
+
+  const [isTopUpConfigModalOpen, setIsTopUpConfigModalOpen] = useState(false);
+  const [tempTopUpRates, setTempTopUpRates] = useState<Record<string, number>>(topUpRates);
+  const [customTopUpIndex, setCustomTopUpIndex] = useState<number | null>(null);
+  const [customTopUpName, setCustomTopUpName] = useState('');
+  const [customTopUpPrice, setCustomTopUpPrice] = useState<number>(50);
+
+  // Sync rates across tabs/windows or when updated from Master Data
+  useEffect(() => {
+    const handleRatesUpdate = () => {
+      try {
+        const saved = localStorage.getItem('trendera_topup_rates');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          setTopUpRates(parsed);
+          setTempTopUpRates(parsed);
+        }
+      } catch {}
+    };
+    window.addEventListener('trendera_topup_rates_updated', handleRatesUpdate);
+    return () => window.removeEventListener('trendera_topup_rates_updated', handleRatesUpdate);
+  }, []);
   
   // Ready target date initialized to defaultDueDays, skipping Thursday if needed
   const [selectedDueDate, setSelectedDueDate] = useState<Date>(() => {
@@ -266,7 +324,7 @@ export const DropScreen: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [items, selectedCustomerId, discountPercent, advancePaid, currentRole, hasDeliveryCharge, deliveryChargeAmount, pickAndDropType, selectedDueDate]);
+  }, [items, selectedCustomerId, discountPercent, advancePaid, currentRole, hasDeliveryCharge, homeDeliveryCharge, pickDropCharge, pickAndDropType, selectedDueDate]);
 
   const selectedCustomer: Customer = customers.find(c => c.id === selectedCustomerId) || customers[0];
 
@@ -390,7 +448,6 @@ export const DropScreen: React.FC = () => {
         totalItemPrice: (existing.basePrice * newQty) + (subSum * newQty)
       };
       setItems(updated);
-      setExpandedItemId(existing.id);
       showToast(`Increased ${garment.name} (${serviceDef.name}) quantity to ${newQty}.`, 'info');
       return;
     }
@@ -416,7 +473,6 @@ export const DropScreen: React.FC = () => {
     };
 
     setItems([...items, newItem]);
-    setExpandedItemId(newItemId);
     showToast(`Added ${garment.name} (${serviceDef.name}) - ₹${unitPrice} to order.`, 'success');
   };
 
@@ -451,7 +507,6 @@ export const DropScreen: React.FC = () => {
     };
 
     setItems([...items, newItem]);
-    setExpandedItemId(newItemId);
     showToast(`Added ${currentWeightConfig.shortName} (${parsedWeight} kg @ ₹${currentWeightConfig.ratePerKg}/kg = ₹${calculatedWeightCost.toFixed(2)}) to order.`, 'success');
   };
 
@@ -551,16 +606,17 @@ export const DropScreen: React.FC = () => {
   };
 
   // Toggle Sub-service (Add-on)
-  const handleToggleSubService = (index: number, subCode: ServiceCode, name: string, price: number) => {
+  const handleToggleSubService = (index: number, subCode: ServiceCode | string, name: string, price: number) => {
     const updated = [...items];
     const currentItem = updated[index];
+    if (!currentItem) return;
     const exists = currentItem.subServices.some(s => s.code === subCode);
 
     let newSubServices: SubServiceItem[];
     if (exists) {
       newSubServices = currentItem.subServices.filter(s => s.code !== subCode);
     } else {
-      newSubServices = [...currentItem.subServices, { code: subCode, name, price }];
+      newSubServices = [...currentItem.subServices, { code: subCode as ServiceCode, name, price: isNaN(price) ? 0 : price }];
     }
 
     const subSum = newSubServices.reduce((a, b) => a + b.price, 0);
@@ -571,6 +627,53 @@ export const DropScreen: React.FC = () => {
       totalItemPrice: (currentItem.basePrice * qty) + (subSum * qty)
     };
     setItems(updated);
+  };
+
+  // Update Sub-service (Add-on) price directly for a specific item
+  const handleUpdateSubServicePrice = (index: number, subCode: string, newPrice: number) => {
+    const validPrice = isNaN(newPrice) ? 0 : Math.max(0, newPrice);
+    const updated = [...items];
+    const currentItem = updated[index];
+    if (!currentItem) return;
+
+    const newSubServices = currentItem.subServices.map(s =>
+      s.code === subCode ? { ...s, price: validPrice } : s
+    );
+
+    const subSum = newSubServices.reduce((a, b) => a + b.price, 0);
+    const qty = currentItem.quantity || 1;
+    updated[index] = {
+      ...currentItem,
+      subServices: newSubServices,
+      totalItemPrice: (currentItem.basePrice * qty) + (subSum * qty)
+    };
+    setItems(updated);
+  };
+
+  // Add custom top-up service to item
+  const handleAddCustomTopUp = (index: number) => {
+    if (!customTopUpName.trim()) {
+      showToast('Please enter a service name', 'warning');
+      return;
+    }
+    const price = Math.max(0, isNaN(customTopUpPrice) ? 0 : customTopUpPrice);
+    const code = `CUSTOM_${Date.now()}`;
+    handleToggleSubService(index, code, customTopUpName.trim(), price);
+    setCustomTopUpIndex(null);
+    setCustomTopUpName('');
+    setCustomTopUpPrice(50);
+    showToast(`Added ${customTopUpName.trim()} (+₹${price})`, 'success');
+  };
+
+  // Save default rates across sessions
+  const handleSaveTopUpRates = () => {
+    setTopUpRates(tempTopUpRates);
+    try {
+      localStorage.setItem('trendera_topup_rates', JSON.stringify(tempTopUpRates));
+      window.dispatchEvent(new Event('trendera_topup_rates_updated'));
+    } catch {}
+    setIsTopUpConfigModalOpen(false);
+    showToast('Default top-up rates updated successfully!', 'success');
   };
 
   // Toggle Remark / Defect
@@ -598,25 +701,31 @@ export const DropScreen: React.FC = () => {
 
   // Delivery charge calculation
   const isDeliveryApplied = hasDeliveryCharge || pickAndDropType === 'HOME_DELIVERY' || pickAndDropType === 'DOORSTEP_PICK_DROP';
-  const effectiveDeliveryCharge = isDeliveryApplied ? (deliveryChargeAmount || 50) : 0;
+  const activeDeliveryCharge = pickAndDropType === 'DOORSTEP_PICK_DROP'
+    ? pickDropCharge
+    : pickAndDropType === 'HOME_DELIVERY'
+      ? homeDeliveryCharge
+      : 0;
+  const effectiveDeliveryCharge = isDeliveryApplied ? Math.max(0, activeDeliveryCharge) : 0;
 
-  // Gross before surcharges and discounts
-  const grossAmount = itemsGrossAmount + effectiveDeliveryCharge;
+  // Gross items subtotal
+  const grossAmount = itemsGrossAmount;
   
-  // Surcharges
+  // Surcharges (calculated on items gross amount)
   let calculatedSurcharge = 0;
   if (surchargeType === 'SAME_DAY') calculatedSurcharge = Math.round((itemsGrossAmount * 50) / 100);
   if (surchargeType === 'NEXT_DAY') calculatedSurcharge = Math.round((itemsGrossAmount * 25) / 100);
 
-  const subTotalWithSurcharge = grossAmount + calculatedSurcharge;
-  const calculatedDiscount = Number(((subTotalWithSurcharge * discountPercent) / 100).toFixed(2));
+  // Discount is calculated on items gross amount (garment cleaning services)
+  const calculatedDiscount = Number(((itemsGrossAmount * (discountPercent || 0)) / 100).toFixed(2));
   
   // Available customer adjustment balance (e.g. ₹5 carried forward from prior order)
   const availableAdjustment = selectedCustomer?.adjustmentBalance || 0;
   const effectiveAdjustment = (applyAdjustment && availableAdjustment > 0) ? availableAdjustment : 0;
 
-  const netBeforeAdjustment = Math.max(0, subTotalWithSurcharge - calculatedDiscount);
-  const netBeforeRound = Math.max(0, netBeforeAdjustment + effectiveAdjustment);
+  // Total before round-off: Items (Gross) + Delivery + Surcharge - Discount + Adjustment
+  const rawSubtotal = itemsGrossAmount + effectiveDeliveryCharge + calculatedSurcharge - calculatedDiscount + effectiveAdjustment;
+  const netBeforeRound = Math.max(0, rawSubtotal);
   const roundedTotal = Math.round(netBeforeRound);
   const roundOff = Number((roundedTotal - netBeforeRound).toFixed(2));
 
@@ -682,10 +791,12 @@ export const DropScreen: React.FC = () => {
         discountAmount: calculatedDiscount,
         discountReason: discountReason || undefined,
         taxAmount: 0,
-        grossAmount,
+        grossAmount: itemsGrossAmount,
         netAmount: roundedTotal,
+        roundOff: roundOff,
         advancePaid: advancePaid,
         paidAmount: advancePaid,
+        balanceDue: balanceDue,
         balanceAmount: balanceDue,
         adjustmentApplied: effectiveAdjustment > 0 ? effectiveAdjustment : undefined,
         differenceAction: effectiveDiffAction,
@@ -702,6 +813,7 @@ export const DropScreen: React.FC = () => {
         const orderNo = res.order?.orderNumber || 'New';
         showToast(`Order #${orderNo} successfully created for ${targetCustomer.name}!`, 'success');
         // Reset cart and draft inputs
+        cancelEditingOrder();
         setItems([]);
         setAdvancePaid(0);
         setDiscountPercent(0);
@@ -722,6 +834,194 @@ export const DropScreen: React.FC = () => {
     } catch (saveError: any) {
       console.error('Error during order creation:', saveError);
       showToast(saveError?.message || 'Unexpected error occurred while creating order.', 'error');
+    }
+  };
+
+  // Helper to reliably populate an order into the POS workspace
+  const populateOrderIntoPos = (targetOrder: Order) => {
+    if (!targetOrder) return;
+    
+    // 1. Set customer
+    if (targetOrder.customerId) {
+      setSelectedCustomerId(targetOrder.customerId);
+      setActiveCustomerId(targetOrder.customerId);
+    }
+    
+    // 2. Order Type
+    setOrderType(targetOrder.orderType || 'PER_PIECES');
+
+    // 3. Populate garments/items with their exact quantities, prices, subServices, and pressing methods
+    const loadedItems: OrderGarmentItem[] = Array.isArray(targetOrder.items) && targetOrder.items.length > 0
+      ? JSON.parse(JSON.stringify(targetOrder.items))
+      : [];
+    setItems(loadedItems);
+
+    // 4. Delivery & Pickup Option
+    const pickType = targetOrder.pickAndDropType || (targetOrder.isPickAndDrop ? 'DOORSTEP_PICK_DROP' : 'COUNTER_WALKIN');
+    setPickAndDropType(pickType);
+    const hasDel = !!targetOrder.hasDeliveryCharge || (Number(targetOrder.deliveryCharge) > 0);
+    setHasDeliveryCharge(hasDel);
+    if (pickType === 'DOORSTEP_PICK_DROP') {
+      setPickDropCharge(Number(targetOrder.deliveryCharge) || 50);
+    } else {
+      setHomeDeliveryCharge(Number(targetOrder.deliveryCharge) || 50);
+    }
+
+    // 5. Discounts, Surcharges, Advance & Notes
+    setDiscountPercent(Number(targetOrder.discountPercent) || 0);
+    setDiscountReason(targetOrder.discountReason || '');
+    setSurchargeType((targetOrder.surchargeType as any) || 'NONE');
+    setAdvancePaid(Number(targetOrder.advancePaid) || 0);
+    setWorkshopNotes(targetOrder.workshopNotes || '');
+    setDeliveryNotes(targetOrder.deliveryNotes || '');
+
+    // 6. Due Date
+    if (targetOrder.dueDate) {
+      try {
+        const parsed = new Date(targetOrder.dueDate);
+        if (!isNaN(parsed.getTime())) {
+          setSelectedDueDate(parsed);
+        }
+      } catch {}
+    }
+  };
+
+  // Synchronize state when editingOrderData or editingOrderId changes
+  useEffect(() => {
+    const targetOrder = editingOrderData || (editingOrderId
+      ? orders.find(o => 
+          o.id === editingOrderId || 
+          String(o.orderNumber) === String(editingOrderId) || 
+          o.id === `ord-${editingOrderId}`
+        )
+      : null);
+
+    if (targetOrder) {
+      populateOrderIntoPos(targetOrder);
+    }
+  }, [editingOrderId, editingOrderData, orders]);
+
+  // Synchronous custom event listener when user clicks "Edit Booking" from Thermal Receipt or Orders
+  useEffect(() => {
+    const handleSyncLoad = (e: Event) => {
+      const customEvent = e as CustomEvent<Order>;
+      if (customEvent.detail) {
+        populateOrderIntoPos(customEvent.detail);
+      }
+    };
+    window.addEventListener('trendera_load_order_for_editing', handleSyncLoad);
+    return () => window.removeEventListener('trendera_load_order_for_editing', handleSyncLoad);
+  }, []);
+
+  // Cancel order editing mode and reset draft
+  const handleCancelEdit = () => {
+    cancelEditingOrder();
+    setItems([]);
+    setAdvancePaid(0);
+    setDiscountPercent(0);
+    setDiscountReason('');
+    setWorkshopNotes('');
+    setDeliveryNotes('');
+    setSurchargeType('NONE');
+    setHasDeliveryCharge(false);
+    setPickAndDropType(null);
+    showToast('Order edit cancelled. Ready for new booking.', 'info');
+  };
+
+  // Save changes to the existing order being edited
+  const handleUpdateOrder = () => {
+    if (!editingOrder) return;
+    try {
+      const targetCustomer = selectedCustomer || (selectedCustomerId ? customers.find(c => c.id === selectedCustomerId) : undefined) || customers[0];
+      if (!targetCustomer) {
+        showToast('Please select or create a customer before saving.', 'warning');
+        return;
+      }
+
+      if (!pickAndDropType) {
+        showToast('Please select a Delivery Option (Store Counter, Home Delivery, or Pick & Drop) first.', 'warning');
+        return;
+      }
+
+      if (items.length === 0) {
+        showToast('Order must contain at least one garment or service item.', 'warning');
+        return;
+      }
+
+      let formattedDueDate = editingOrder.dueDate || new Date().toISOString().split('T')[0];
+      try {
+        if (selectedDueDate instanceof Date && !isNaN(selectedDueDate.getTime())) {
+          formattedDueDate = selectedDueDate.toISOString().split('T')[0];
+        }
+      } catch {}
+
+      // Reformat items ensuring sequence and barcodes
+      const formattedItems: OrderGarmentItem[] = items.map((item, idx) => ({
+        ...item,
+        id: item.id || `item-${editingOrder.orderNumber}-${idx + 1}`,
+        garmentSequence: idx + 1,
+        barcode: item.barcode || `${editingOrder.orderNumber}-${idx + 1}-2`,
+        status: item.status || 'RECEIVED',
+        quantity: item.quantity || 1,
+        basePrice: item.basePrice || 100,
+        subServices: item.subServices || [],
+        totalItemPrice: item.totalItemPrice || 100,
+        remarks: item.remarks || [],
+        pressingMethod: item.pressingMethod || DEFAULT_PRESSING_METHOD,
+        category: item.category || 'MEN'
+      }));
+
+      const updatedOrderData: Partial<Order> = {
+        customerId: targetCustomer.id,
+        customerName: targetCustomer.name,
+        customerMobile: targetCustomer.mobile,
+        customerAddress: targetCustomer.address,
+        orderType,
+        items: formattedItems,
+        totalPieces: totalPiecesCount,
+        totalWeightKg: totalWeightKg,
+        deliveryCharge: effectiveDeliveryCharge,
+        hasDeliveryCharge: isDeliveryApplied,
+        isPickAndDrop: pickAndDropType === 'DOORSTEP_PICK_DROP',
+        pickAndDropType: pickAndDropType || 'COUNTER_WALKIN',
+        surchargeType,
+        surchargeAmount: calculatedSurcharge,
+        discountPercent,
+        discountAmount: calculatedDiscount,
+        discountReason: discountReason || undefined,
+        grossAmount: itemsGrossAmount,
+        netAmount: roundedTotal,
+        roundOff: roundOff,
+        advancePaid: advancePaid,
+        balanceDue: balanceDue,
+        workshopNotes,
+        deliveryNotes,
+        dueDate: formattedDueDate
+      };
+
+      const res = updateOrder(editingOrder.id, updatedOrderData);
+      if (res && res.success) {
+        showToast(`Order #${editingOrder.orderNumber} successfully updated with ${totalPiecesCount} pieces!`, 'success');
+        const updatedOrderId = editingOrder.id;
+        cancelEditingOrder();
+        setItems([]);
+        setAdvancePaid(0);
+        setDiscountPercent(0);
+        setDiscountReason('');
+        setWorkshopNotes('');
+        setDeliveryNotes('');
+        setSurchargeType('NONE');
+        setHasDeliveryCharge(false);
+        setPickAndDropType(null);
+
+        setActiveOrderId(updatedOrderId);
+        setThermalReceiptModalOpen(true);
+      } else {
+        showToast(res?.error || 'Failed to update order.', 'error');
+      }
+    } catch (err: any) {
+      console.error('Error updating order:', err);
+      showToast(err?.message || 'Unexpected error updating order.', 'error');
     }
   };
 
@@ -764,6 +1064,44 @@ export const DropScreen: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Editing Order Banner */}
+      {editingOrder && (
+        <div className="bg-amber-500/15 border-b border-amber-500/40 px-4 py-2 flex items-center justify-between gap-3 text-amber-950 shrink-0 shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-3 w-3 relative">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+            </span>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-extrabold text-xs sm:text-sm text-amber-950 tracking-wide">
+                  EDITING ORDER #{editingOrder.orderNumber}
+                </span>
+                <span className="bg-amber-200 text-amber-900 font-bold text-[10px] px-2 py-0.5 rounded-full border border-amber-300">
+                  {editingOrder.customerName}
+                </span>
+                <span className="text-amber-800 text-xs hidden md:inline">
+                  (Booked: {editingOrder.orderDate})
+                </span>
+              </div>
+              <p className="text-[11px] text-amber-800">
+                Order details & items loaded below. Modify garments, adjust prices, or edit delivery details.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleCancelEdit}
+              className="px-3 py-1 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-md border border-slate-300 shadow-2xs transition flex items-center gap-1.5 cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5 text-slate-500" />
+              <span>Cancel Edit</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Main 3-Column POS Workspace */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden p-3 gap-3">
@@ -989,32 +1327,6 @@ export const DropScreen: React.FC = () => {
           {/* ============================================================ */}
           {orderType === 'PER_PIECES' ? (
             <div className="flex-1 flex flex-col overflow-hidden bg-slate-50/50">
-              
-              {/* TOP SERVICE TABS (Dry Cleaning, Laundry, Steam Press Only, Leather Care, Mending Only) */}
-              <div className="bg-white px-3 pt-2.5 border-b border-slate-200 shrink-0">
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-2 scrollbar-none">
-                  {SERVICE_TABS.map(tab => {
-                    const isSelected = selectedServiceTab === tab.code;
-                    const IconComp = tab.icon;
-                    return (
-                      <button
-                        key={tab.code}
-                        type="button"
-                        onClick={() => setSelectedServiceTab(tab.code)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 whitespace-nowrap transition border ${
-                          isSelected
-                            ? 'bg-sky-600 text-white border-sky-600 shadow-xs ring-2 ring-sky-200'
-                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
-                        }`}
-                      >
-                        <IconComp className={`w-3.5 h-3.5 ${isSelected ? 'text-white' : 'text-sky-600'}`} />
-                        <span>{tab.name}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
               {/* CATEGORY SUB-TABS & SEARCH BAR (Screenshots 1 & 2) */}
               <div className="p-2.5 bg-slate-100/90 border-b border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 shrink-0">
                 
@@ -1318,11 +1630,14 @@ export const DropScreen: React.FC = () => {
                         </button>
                         <div className="relative flex-1">
                           <input
-                            type="number"
-                            step="0.1"
-                            min="0.1"
+                            type="text"
+                            inputMode="decimal"
                             value={weightInput}
-                            onChange={(e) => setWeightInput(e.target.value)}
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => {
+                              const val = e.target.value.replace(/[^0-9.]/g, '').replace(/^0+(?=\d)/, '');
+                              setWeightInput(val);
+                            }}
                             className="w-full text-center py-1.5 bg-white border border-slate-300 rounded text-sm font-bold font-mono text-slate-900 outline-none focus:ring-1 focus:ring-indigo-500 shadow-2xs"
                           />
                           <span className="absolute right-2.5 top-2 text-[11px] font-bold text-slate-400 font-mono">kg</span>
@@ -1386,11 +1701,14 @@ export const DropScreen: React.FC = () => {
                         </button>
                         <div className="relative flex-1">
                           <input
-                            type="number"
-                            step="1"
-                            min="1"
+                            type="text"
+                            inputMode="numeric"
                             value={piecesInput}
-                            onChange={(e) => setPiecesInput(e.target.value)}
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => {
+                              const val = e.target.value.replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '');
+                              setPiecesInput(val);
+                            }}
                             className="w-full text-center py-1.5 bg-white border border-slate-300 rounded text-sm font-bold font-mono text-slate-900 outline-none focus:ring-1 focus:ring-indigo-500 shadow-2xs"
                           />
                           <span className="absolute right-2.5 top-2 text-[11px] font-bold text-slate-400 font-mono">pcs</span>
@@ -1633,10 +1951,14 @@ export const DropScreen: React.FC = () => {
                                 <Minus className="w-2.5 h-2.5" />
                               </button>
                               <input
-                                type="number"
-                                min="1"
+                                type="text"
+                                inputMode="numeric"
                                 value={item.quantity || 1}
-                                onChange={(e) => handleQuantityChange(idx, parseInt(e.target.value, 10))}
+                                onFocus={(e) => e.target.select()}
+                                onChange={(e) => {
+                                  const cleaned = e.target.value.replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '');
+                                  handleQuantityChange(idx, cleaned === '' ? 1 : parseInt(cleaned, 10));
+                                }}
                                 className="w-10 text-center py-0.5 bg-white border border-slate-300 rounded font-mono font-bold text-xs text-slate-900 outline-none focus:ring-1 focus:ring-sky-500"
                               />
                               <button
@@ -1656,11 +1978,15 @@ export const DropScreen: React.FC = () => {
                             <div className="flex items-center gap-1 mt-0.5">
                               <span className="text-slate-500 font-bold text-xs">₹</span>
                               <input
-                                type="number"
-                                min="0"
-                                step="1"
-                                value={item.basePrice}
-                                onChange={(e) => handlePriceChange(idx, parseFloat(e.target.value))}
+                                type="text"
+                                inputMode="decimal"
+                                placeholder="0"
+                                value={item.basePrice === 0 ? '' : item.basePrice}
+                                onFocus={(e) => e.target.select()}
+                                onChange={(e) => {
+                                  const cleaned = e.target.value.replace(/[^0-9.]/g, '').replace(/^0+(?=\d)/, '');
+                                  handlePriceChange(idx, cleaned === '' ? 0 : parseFloat(cleaned));
+                                }}
                                 className="w-18 px-1.5 py-0.5 bg-white border border-slate-300 rounded font-mono font-bold text-xs text-slate-900 outline-none focus:ring-1 focus:ring-sky-500"
                               />
                             </div>
@@ -1728,42 +2054,264 @@ export const DropScreen: React.FC = () => {
                               </div>
 
                               {/* Sub-Services / Add-ons Pills */}
-                              <div className="space-y-1">
-                                <span className="text-[10.5px] font-bold text-slate-600 block">Sub-Services / Top-Up:</span>
-                                <div className="flex items-center gap-1 flex-wrap">
+                              <div className="space-y-1.5">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[10.5px] font-bold text-slate-700 flex items-center gap-1">
+                                    <span>Sub-Services / Top-Up:</span>
+                                    <span className="text-[9px] font-normal text-slate-400">(Click to add, edit price inline)</span>
+                                  </span>
                                   <button
                                     type="button"
-                                    onClick={() => handleToggleSubService(idx, 'ST', 'Starch', 50)}
-                                    className={`px-2 py-0.5 rounded text-[10px] font-semibold border transition ${
-                                      item.subServices.some(s => s.code === 'ST')
-                                        ? 'bg-purple-600 text-white border-purple-600 font-bold'
-                                        : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
-                                    }`}
+                                    onClick={() => {
+                                      setTempTopUpRates(topUpRates);
+                                      setIsTopUpConfigModalOpen(true);
+                                    }}
+                                    className="text-[10px] text-sky-600 hover:text-sky-800 font-semibold flex items-center gap-0.5"
+                                    title="Configure default rates for top-up services"
                                   >
-                                    + Starch (₹50)
+                                    <Edit3 className="w-2.5 h-2.5" />
+                                    <span>Edit Defaults</span>
                                   </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleToggleSubService(idx, 'SP', 'Steam Press', 50)}
-                                    className={`px-2 py-0.5 rounded text-[10px] font-semibold border transition ${
-                                      item.subServices.some(s => s.code === 'SP')
-                                        ? 'bg-amber-600 text-white border-amber-600 font-bold'
-                                        : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
-                                    }`}
-                                  >
-                                    + Steam (₹50)
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleToggleSubService(idx, 'ALT', 'Alteration', 40)}
-                                    className={`px-2 py-0.5 rounded text-[10px] font-semibold border transition ${
-                                      item.subServices.some(s => s.code === 'ALT')
-                                        ? 'bg-rose-600 text-white border-rose-600 font-bold'
-                                        : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
-                                    }`}
-                                  >
-                                    + Alteration (₹40)
-                                  </button>
+                                </div>
+
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  {/* Starch Top-Up */}
+                                  {(() => {
+                                    const activeStarch = item.subServices.find(s => s.code === 'ST');
+                                    if (activeStarch) {
+                                      return (
+                                        <div className="flex items-center rounded-md border border-purple-400 bg-purple-50 text-[10px] shadow-2xs overflow-hidden">
+                                          <span className="px-2 py-0.5 font-bold flex items-center gap-1 text-purple-800 bg-purple-100">
+                                            <Check className="w-2.5 h-2.5 text-purple-700" />
+                                            Starch
+                                          </span>
+                                          <div className="flex items-center px-1.5 py-0.5 bg-white border-l border-r border-purple-200">
+                                            <span className="text-slate-400 font-bold text-[9px] mr-0.5">₹</span>
+                                            <input
+                                              type="text"
+                                              inputMode="decimal"
+                                              placeholder="0"
+                                              value={activeStarch.price === 0 ? '' : activeStarch.price}
+                                              onFocus={(e) => e.target.select()}
+                                              onChange={(e) => {
+                                                const cleaned = e.target.value.replace(/[^0-9.]/g, '').replace(/^0+(?=\d)/, '');
+                                                handleUpdateSubServicePrice(idx, 'ST', cleaned === '' ? 0 : parseFloat(cleaned));
+                                              }}
+                                              className="w-12 px-1 py-0 text-center font-mono font-bold text-[11px] text-purple-900 outline-none rounded focus:bg-purple-50"
+                                              title="Edit Starch Price"
+                                            />
+                                          </div>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleToggleSubService(idx, 'ST', 'Starch', activeStarch.price)}
+                                            className="px-1.5 py-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                                            title="Remove Starch"
+                                          >
+                                            <X className="w-3 h-3" />
+                                          </button>
+                                        </div>
+                                      );
+                                    }
+                                    return (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleToggleSubService(idx, 'ST', 'Starch', topUpRates.ST ?? 50)}
+                                        className="px-2 py-1 rounded-md text-[10px] font-semibold border border-slate-300 bg-white text-slate-700 hover:bg-purple-50 hover:text-purple-700 hover:border-purple-300 transition flex items-center gap-1 shadow-2xs"
+                                      >
+                                        <Plus className="w-2.5 h-2.5 text-purple-600" />
+                                        <span>Starch (₹{topUpRates.ST ?? 50})</span>
+                                      </button>
+                                    );
+                                  })()}
+
+                                  {/* Steam Press Top-Up */}
+                                  {(() => {
+                                    const activeSteam = item.subServices.find(s => s.code === 'SP');
+                                    if (activeSteam) {
+                                      return (
+                                        <div className="flex items-center rounded-md border border-amber-400 bg-amber-50 text-[10px] shadow-2xs overflow-hidden">
+                                          <span className="px-2 py-0.5 font-bold flex items-center gap-1 text-amber-800 bg-amber-100">
+                                            <Check className="w-2.5 h-2.5 text-amber-700" />
+                                            Steam
+                                          </span>
+                                          <div className="flex items-center px-1.5 py-0.5 bg-white border-l border-r border-amber-200">
+                                            <span className="text-slate-400 font-bold text-[9px] mr-0.5">₹</span>
+                                            <input
+                                              type="text"
+                                              inputMode="decimal"
+                                              placeholder="0"
+                                              value={activeSteam.price === 0 ? '' : activeSteam.price}
+                                              onFocus={(e) => e.target.select()}
+                                              onChange={(e) => {
+                                                const cleaned = e.target.value.replace(/[^0-9.]/g, '').replace(/^0+(?=\d)/, '');
+                                                handleUpdateSubServicePrice(idx, 'SP', cleaned === '' ? 0 : parseFloat(cleaned));
+                                              }}
+                                              className="w-12 px-1 py-0 text-center font-mono font-bold text-[11px] text-amber-900 outline-none rounded focus:bg-amber-50"
+                                              title="Edit Steam Press Price"
+                                            />
+                                          </div>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleToggleSubService(idx, 'SP', 'Steam Press', activeSteam.price)}
+                                            className="px-1.5 py-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                                            title="Remove Steam Press"
+                                          >
+                                            <X className="w-3 h-3" />
+                                          </button>
+                                        </div>
+                                      );
+                                    }
+                                    return (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleToggleSubService(idx, 'SP', 'Steam Press', topUpRates.SP ?? 50)}
+                                        className="px-2 py-1 rounded-md text-[10px] font-semibold border border-slate-300 bg-white text-slate-700 hover:bg-amber-50 hover:text-amber-700 hover:border-amber-300 transition flex items-center gap-1 shadow-2xs"
+                                      >
+                                        <Plus className="w-2.5 h-2.5 text-amber-600" />
+                                        <span>Steam (₹{topUpRates.SP ?? 50})</span>
+                                      </button>
+                                    );
+                                  })()}
+
+                                  {/* Alteration Top-Up */}
+                                  {(() => {
+                                    const activeAlt = item.subServices.find(s => s.code === 'ALT');
+                                    if (activeAlt) {
+                                      return (
+                                        <div className="flex items-center rounded-md border border-rose-400 bg-rose-50 text-[10px] shadow-2xs overflow-hidden">
+                                          <span className="px-2 py-0.5 font-bold flex items-center gap-1 text-rose-800 bg-rose-100">
+                                            <Check className="w-2.5 h-2.5 text-rose-700" />
+                                            Alteration
+                                          </span>
+                                          <div className="flex items-center px-1.5 py-0.5 bg-white border-l border-r border-rose-200">
+                                            <span className="text-slate-400 font-bold text-[9px] mr-0.5">₹</span>
+                                            <input
+                                              type="text"
+                                              inputMode="decimal"
+                                              placeholder="0"
+                                              value={activeAlt.price === 0 ? '' : activeAlt.price}
+                                              onFocus={(e) => e.target.select()}
+                                              onChange={(e) => {
+                                                const cleaned = e.target.value.replace(/[^0-9.]/g, '').replace(/^0+(?=\d)/, '');
+                                                handleUpdateSubServicePrice(idx, 'ALT', cleaned === '' ? 0 : parseFloat(cleaned));
+                                              }}
+                                              className="w-12 px-1 py-0 text-center font-mono font-bold text-[11px] text-rose-900 outline-none rounded focus:bg-rose-50"
+                                              title="Edit Alteration Price"
+                                            />
+                                          </div>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleToggleSubService(idx, 'ALT', 'Alteration', activeAlt.price)}
+                                            className="px-1.5 py-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                                            title="Remove Alteration"
+                                          >
+                                            <X className="w-3 h-3" />
+                                          </button>
+                                        </div>
+                                      );
+                                    }
+                                    return (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleToggleSubService(idx, 'ALT', 'Alteration', topUpRates.ALT ?? 40)}
+                                        className="px-2 py-1 rounded-md text-[10px] font-semibold border border-slate-300 bg-white text-slate-700 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-300 transition flex items-center gap-1 shadow-2xs"
+                                      >
+                                        <Plus className="w-2.5 h-2.5 text-rose-600" />
+                                        <span>Alteration (₹{topUpRates.ALT ?? 40})</span>
+                                      </button>
+                                    );
+                                  })()}
+
+                                  {/* Custom Active Sub-Services attached to this item */}
+                                  {item.subServices
+                                    .filter(s => !['ST', 'SP', 'ALT'].includes(s.code))
+                                    .map(customSub => (
+                                      <div key={customSub.code} className="flex items-center rounded-md border border-sky-300 bg-sky-50 text-[10px] shadow-2xs overflow-hidden">
+                                        <span className="px-2 py-0.5 font-bold flex items-center gap-1 text-sky-800 bg-sky-100">
+                                          <Check className="w-2.5 h-2.5 text-sky-700" />
+                                          {customSub.name}
+                                        </span>
+                                        <div className="flex items-center px-1.5 py-0.5 bg-white border-l border-r border-sky-200">
+                                          <span className="text-slate-400 font-bold text-[9px] mr-0.5">₹</span>
+                                          <input
+                                            type="text"
+                                            inputMode="decimal"
+                                            placeholder="0"
+                                            value={customSub.price === 0 ? '' : customSub.price}
+                                            onFocus={(e) => e.target.select()}
+                                            onChange={(e) => {
+                                              const cleaned = e.target.value.replace(/[^0-9.]/g, '').replace(/^0+(?=\d)/, '');
+                                              handleUpdateSubServicePrice(idx, customSub.code, cleaned === '' ? 0 : parseFloat(cleaned));
+                                            }}
+                                            className="w-12 px-1 py-0 text-center font-mono font-bold text-[11px] text-sky-900 outline-none rounded focus:bg-sky-50"
+                                            title={`Edit ${customSub.name} Price`}
+                                          />
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleToggleSubService(idx, customSub.code, customSub.name, customSub.price)}
+                                          className="px-1.5 py-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                                          title={`Remove ${customSub.name}`}
+                                        >
+                                          <X className="w-3 h-3" />
+                                        </button>
+                                      </div>
+                                    ))}
+
+                                  {/* Custom Top-Up Quick Adder */}
+                                  {customTopUpIndex === idx ? (
+                                    <div className="flex items-center gap-1 bg-sky-50 border border-sky-300 rounded-md p-1 shadow-2xs">
+                                      <input
+                                        type="text"
+                                        placeholder="Service (e.g. Darning)"
+                                        value={customTopUpName}
+                                        onChange={(e) => setCustomTopUpName(e.target.value)}
+                                        className="w-28 px-1.5 py-0.5 text-[10px] bg-white border border-sky-200 rounded font-semibold text-slate-800 outline-none focus:ring-1 focus:ring-sky-500"
+                                        autoFocus
+                                      />
+                                      <span className="text-[9.5px] font-bold text-slate-500">₹</span>
+                                      <input
+                                        type="text"
+                                        inputMode="decimal"
+                                        placeholder="0"
+                                        value={customTopUpPrice === 0 ? '' : customTopUpPrice}
+                                        onFocus={(e) => e.target.select()}
+                                        onChange={(e) => {
+                                          const cleaned = e.target.value.replace(/[^0-9.]/g, '').replace(/^0+(?=\d)/, '');
+                                          setCustomTopUpPrice(cleaned === '' ? 0 : parseFloat(cleaned));
+                                        }}
+                                        className="w-12 px-1 py-0.5 text-[10px] bg-white border border-sky-200 rounded font-mono font-bold text-slate-800 outline-none focus:ring-1 focus:ring-sky-500 text-center"
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => handleAddCustomTopUp(idx)}
+                                        className="px-2 py-0.5 bg-sky-600 hover:bg-sky-700 text-white rounded text-[10px] font-bold"
+                                      >
+                                        Add
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setCustomTopUpIndex(null)}
+                                        className="text-slate-400 hover:text-slate-600 px-0.5"
+                                      >
+                                        <X className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setCustomTopUpIndex(idx);
+                                        setCustomTopUpName('');
+                                        setCustomTopUpPrice(50);
+                                      }}
+                                      className="px-2 py-1 rounded-md text-[10px] font-semibold border border-dashed border-sky-300 text-sky-600 bg-sky-50/50 hover:bg-sky-100 hover:border-sky-400 transition flex items-center gap-1 shadow-2xs"
+                                      title="Add custom top-up service"
+                                    >
+                                      <Plus className="w-2.5 h-2.5" />
+                                      <span>Custom</span>
+                                    </button>
+                                  )}
                                 </div>
                               </div>
 
@@ -1863,11 +2411,20 @@ export const DropScreen: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={discountPercent}
-                    onChange={(e) => setDiscountPercent(Math.max(0, Math.min(100, Number(e.target.value))))}
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="0"
+                    value={discountPercent === 0 ? '' : discountPercent}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => {
+                      const cleaned = e.target.value.replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '');
+                      if (!cleaned) {
+                        setDiscountPercent(0);
+                      } else {
+                        const num = parseInt(cleaned, 10);
+                        setDiscountPercent(isNaN(num) ? 0 : Math.max(0, Math.min(100, num)));
+                      }
+                    }}
                     className="w-16 p-1.5 border border-slate-300 rounded font-mono font-bold text-slate-900 outline-none focus:ring-1 focus:ring-sky-500"
                   />
                   <input
@@ -1956,12 +2513,20 @@ export const DropScreen: React.FC = () => {
                   <div className="relative flex-1">
                     <span className="absolute left-2.5 top-2 text-xs font-bold text-emerald-700">₹</span>
                     <input
-                      type="number"
-                      min="0"
-                      max={roundedTotal}
-                      value={advancePaid}
-                      onChange={(e) => setAdvancePaid(Number(e.target.value))}
+                      type="text"
+                      inputMode="decimal"
                       placeholder="0.00"
+                      value={advancePaid === 0 ? '' : advancePaid}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => {
+                        const cleaned = e.target.value.replace(/[^0-9.]/g, '').replace(/^0+(?=\d)/, '');
+                        if (!cleaned) {
+                          setAdvancePaid(0);
+                        } else {
+                          const num = parseFloat(cleaned);
+                          setAdvancePaid(isNaN(num) ? 0 : Math.max(0, Math.min(roundedTotal, num)));
+                        }
+                      }}
                       className="w-full pl-6 pr-2 py-1.5 border border-slate-300 rounded font-mono font-bold text-emerald-800 text-sm outline-none focus:ring-2 focus:ring-emerald-500 bg-emerald-50/40"
                     />
                   </div>
@@ -2155,8 +2720,9 @@ export const DropScreen: React.FC = () => {
                   </button>
 
                   {/* 2. Doorstep Delivery */}
-                  <button
-                    type="button"
+                  <div
+                    role="button"
+                    tabIndex={0}
                     id="btn-delivery-home"
                     onClick={() => {
                       if (pickAndDropType === 'HOME_DELIVERY') {
@@ -2180,16 +2746,48 @@ export const DropScreen: React.FC = () => {
                       </div>
                       <div className="text-[9px] text-slate-500 mt-0.5">Drop at Address</div>
                     </div>
-                    <span className={`text-[9.5px] font-bold mt-1.5 px-1.5 py-0.5 rounded inline-block w-fit ${
-                      pickAndDropType === 'HOME_DELIVERY' ? 'bg-emerald-200 text-emerald-900 font-mono' : 'bg-slate-100 text-slate-600 font-mono border border-slate-200'
-                    }`}>
-                      +₹{deliveryChargeAmount}
-                    </span>
-                  </button>
+                    <div
+                      className="mt-1.5 flex items-center gap-1 w-fit"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <span className={`text-[9.5px] font-bold ${pickAndDropType === 'HOME_DELIVERY' ? 'text-emerald-900' : 'text-slate-500'}`}>
+                        +₹
+                      </span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0"
+                        value={homeDeliveryCharge === 0 ? '' : homeDeliveryCharge}
+                        title="Click to edit Home Delivery Charge"
+                        onFocus={(e) => {
+                          e.target.select();
+                          if (pickAndDropType !== 'HOME_DELIVERY') {
+                            setPickAndDropType('HOME_DELIVERY');
+                            setHasDeliveryCharge(true);
+                          }
+                        }}
+                        onChange={(e) => {
+                          const cleaned = e.target.value.replace(/[^0-9.]/g, '').replace(/^0+(?=\d)/, '');
+                          const num = cleaned === '' ? 0 : parseFloat(cleaned);
+                          setHomeDeliveryCharge(isNaN(num) ? 0 : num);
+                          if (pickAndDropType !== 'HOME_DELIVERY') {
+                            setPickAndDropType('HOME_DELIVERY');
+                            setHasDeliveryCharge(true);
+                          }
+                        }}
+                        className={`w-14 px-1 py-0.5 text-center font-mono font-bold text-xs rounded border outline-none shadow-2xs transition ${
+                          pickAndDropType === 'HOME_DELIVERY'
+                            ? 'bg-white border-emerald-500 text-emerald-950 focus:ring-1 focus:ring-emerald-600'
+                            : 'bg-slate-50 border-slate-300 text-slate-700 hover:bg-white focus:bg-white focus:ring-1 focus:ring-slate-400'
+                        }`}
+                      />
+                    </div>
+                  </div>
 
                   {/* 3. Rider Pick & Drop */}
-                  <button
-                    type="button"
+                  <div
+                    role="button"
+                    tabIndex={0}
                     id="btn-delivery-pick-drop"
                     onClick={() => {
                       if (pickAndDropType === 'DOORSTEP_PICK_DROP') {
@@ -2213,42 +2811,54 @@ export const DropScreen: React.FC = () => {
                       </div>
                       <div className="text-[9px] text-slate-500 mt-0.5">2-Way Rider</div>
                     </div>
-                    <span className={`text-[9.5px] font-bold mt-1.5 px-1.5 py-0.5 rounded inline-block w-fit ${
-                      pickAndDropType === 'DOORSTEP_PICK_DROP' ? 'bg-purple-200 text-purple-900 font-mono' : 'bg-slate-100 text-slate-600 font-mono border border-slate-200'
-                    }`}>
-                      +₹{deliveryChargeAmount}
-                    </span>
-                  </button>
+                    <div
+                      className="mt-1.5 flex items-center gap-1 w-fit"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <span className={`text-[9.5px] font-bold ${pickAndDropType === 'DOORSTEP_PICK_DROP' ? 'text-purple-900' : 'text-slate-500'}`}>
+                        +₹
+                      </span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0"
+                        value={pickDropCharge === 0 ? '' : pickDropCharge}
+                        title="Click to edit Pick & Drop Charge"
+                        onFocus={(e) => {
+                          e.target.select();
+                          if (pickAndDropType !== 'DOORSTEP_PICK_DROP') {
+                            setPickAndDropType('DOORSTEP_PICK_DROP');
+                            setHasDeliveryCharge(true);
+                          }
+                        }}
+                        onChange={(e) => {
+                          const cleaned = e.target.value.replace(/[^0-9.]/g, '').replace(/^0+(?=\d)/, '');
+                          const num = cleaned === '' ? 0 : parseFloat(cleaned);
+                          setPickDropCharge(isNaN(num) ? 0 : num);
+                          if (pickAndDropType !== 'DOORSTEP_PICK_DROP') {
+                            setPickAndDropType('DOORSTEP_PICK_DROP');
+                            setHasDeliveryCharge(true);
+                          }
+                        }}
+                        className={`w-14 px-1 py-0.5 text-center font-mono font-bold text-xs rounded border outline-none shadow-2xs transition ${
+                          pickAndDropType === 'DOORSTEP_PICK_DROP'
+                            ? 'bg-white border-purple-500 text-purple-950 focus:ring-1 focus:ring-purple-600'
+                            : 'bg-slate-50 border-slate-300 text-slate-700 hover:bg-white focus:bg-white focus:ring-1 focus:ring-slate-400'
+                        }`}
+                      />
+                    </div>
+                  </div>
                 </div>
 
-                {/* If Home Delivery or Pick & Drop is active: Customizable Charge & Note */}
+                {/* If Home Delivery or Pick & Drop is active: Delivery address / landmark notes */}
                 {isDeliveryApplied && (
-                  <div className="bg-white p-2 rounded-md border border-slate-200 space-y-1.5 text-xs">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10.5px] font-bold text-slate-700">Delivery Charge:</span>
-                      <div className="flex items-center gap-1">
-                        {[40, 50, 80, 100].map(amt => (
-                          <button
-                            key={amt}
-                            type="button"
-                            onClick={() => setDeliveryChargeAmount(amt)}
-                            className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border transition ${
-                              deliveryChargeAmount === amt
-                                ? 'bg-emerald-600 text-white border-emerald-600'
-                                : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
-                            }`}
-                          >
-                            ₹{amt}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
+                  <div className="bg-white p-2 rounded-md border border-slate-200 shadow-2xs">
                     <input
                       type="text"
-                      placeholder="Delivery address / landmark notes (optional)..."
+                      placeholder="Delivery address / landmark / rider notes (optional)..."
                       value={deliveryNotes}
                       onChange={(e) => setDeliveryNotes(e.target.value)}
-                      className="w-full px-2 py-1 bg-white border border-slate-300 rounded text-[11px] outline-none focus:ring-1 focus:ring-sky-500"
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-xs outline-none focus:ring-1 focus:ring-sky-500 placeholder:text-slate-400"
                     />
                   </div>
                 )}
@@ -2272,40 +2882,74 @@ export const DropScreen: React.FC = () => {
           {/* Bottom Order Action Buttons (Active only when delivery option is selected) */}
           <div className="p-2.5 bg-slate-100 border-t border-slate-200 flex flex-col gap-1.5 shrink-0">
             <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  if (items.length === 0 || window.confirm('Cancel and clear current order draft?')) {
-                    setItems([]);
-                    setPickAndDropType(null);
-                    setActiveView('HOME');
-                  }
-                }}
-                className="py-2 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 font-bold rounded-md text-xs flex items-center justify-center gap-1 shadow-2xs transition cursor-pointer"
-              >
-                <span>Cancel (Esc)</span>
-              </button>
+              {editingOrder ? (
+                <button
+                  type="button"
+                  onClick={handleCancelEdit}
+                  className="py-2 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 font-bold rounded-md text-xs flex items-center justify-center gap-1 shadow-2xs transition cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Cancel Edit</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (items.length === 0 || window.confirm('Cancel and clear current order draft?')) {
+                      setItems([]);
+                      setPickAndDropType(null);
+                      setActiveView('HOME');
+                    }
+                  }}
+                  className="py-2 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 font-bold rounded-md text-xs flex items-center justify-center gap-1 shadow-2xs transition cursor-pointer"
+                >
+                  <span>Cancel (Esc)</span>
+                </button>
+              )}
 
-              <button
-                id="btn-save-order"
-                onClick={handleSaveOrder}
-                disabled={!pickAndDropType || items.length === 0}
-                title={
-                  !pickAndDropType
-                    ? 'Please select a Delivery Option above to activate'
-                    : items.length === 0
-                    ? 'Add garments or weight laundry items to create order'
-                    : 'Create Order (F12)'
-                }
-                className={`py-2 text-white font-bold rounded-md text-xs flex items-center justify-center gap-1.5 shadow-xs transition ${
-                  !pickAndDropType || items.length === 0
-                    ? 'bg-slate-300 text-slate-500 cursor-not-allowed opacity-60'
-                    : 'bg-sky-600 hover:bg-sky-700 cursor-pointer'
-                }`}
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>Create Order (F12)</span>
-              </button>
+              {editingOrder ? (
+                <button
+                  id="btn-update-order"
+                  onClick={handleUpdateOrder}
+                  disabled={!pickAndDropType || items.length === 0}
+                  title={
+                    !pickAndDropType
+                      ? 'Please select a Delivery Option above to activate'
+                      : items.length === 0
+                      ? 'Add garments or weight laundry items to update order'
+                      : `Save changes to Order #${editingOrder.orderNumber}`
+                  }
+                  className={`py-2 text-white font-bold rounded-md text-xs flex items-center justify-center gap-1.5 shadow-xs transition ${
+                    !pickAndDropType || items.length === 0
+                      ? 'bg-slate-300 text-slate-500 cursor-not-allowed opacity-60'
+                      : 'bg-amber-600 hover:bg-amber-700 cursor-pointer'
+                  }`}
+                >
+                  <Save className="w-4 h-4" />
+                  <span>Update Order #{editingOrder.orderNumber}</span>
+                </button>
+              ) : (
+                <button
+                  id="btn-save-order"
+                  onClick={handleSaveOrder}
+                  disabled={!pickAndDropType || items.length === 0}
+                  title={
+                    !pickAndDropType
+                      ? 'Please select a Delivery Option above to activate'
+                      : items.length === 0
+                      ? 'Add garments or weight laundry items to create order'
+                      : 'Create Order (F12)'
+                  }
+                  className={`py-2 text-white font-bold rounded-md text-xs flex items-center justify-center gap-1.5 shadow-xs transition ${
+                    !pickAndDropType || items.length === 0
+                      ? 'bg-slate-300 text-slate-500 cursor-not-allowed opacity-60'
+                      : 'bg-sky-600 hover:bg-sky-700 cursor-pointer'
+                  }`}
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Create Order (F12)</span>
+                </button>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-1.5 pt-0.5">
@@ -2353,6 +2997,127 @@ export const DropScreen: React.FC = () => {
         </div>
 
       </div>
+
+      {/* Default Top-Up Rates Configuration Modal */}
+      {isTopUpConfigModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-xl shadow-2xl border border-slate-200 max-w-md w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-lg bg-sky-500/20 text-sky-400">
+                  <Edit3 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm">Default Top-Up / Sub-Service Rates</h3>
+                  <p className="text-slate-400 text-xs">Set base default rates when toggling add-ons</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsTopUpConfigModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-md transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div className="space-y-3">
+                {/* Starch */}
+                <div className="flex items-center justify-between p-3 rounded-lg border border-purple-200 bg-purple-50/50">
+                  <div>
+                    <span className="font-bold text-xs text-purple-950 block">Starch & Crisp (ST)</span>
+                    <span className="text-[11px] text-slate-500">Default rate per garment piece</span>
+                  </div>
+                  <div className="flex items-center gap-1 bg-white border border-purple-300 rounded px-2 py-1 shadow-2xs">
+                    <span className="text-xs font-bold text-slate-400">₹</span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="0"
+                      value={(tempTopUpRates.ST ?? 50) === 0 ? '' : (tempTopUpRates.ST ?? 50)}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => {
+                        const cleaned = e.target.value.replace(/[^0-9.]/g, '').replace(/^0+(?=\d)/, '');
+                        setTempTopUpRates({ ...tempTopUpRates, ST: cleaned === '' ? 0 : parseFloat(cleaned) });
+                      }}
+                      className="w-16 text-right font-mono font-bold text-xs text-purple-950 outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Steam Press */}
+                <div className="flex items-center justify-between p-3 rounded-lg border border-amber-200 bg-amber-50/50">
+                  <div>
+                    <span className="font-bold text-xs text-amber-950 block">Steam Press & Ironing (SP)</span>
+                    <span className="text-[11px] text-slate-500">Default rate per garment piece</span>
+                  </div>
+                  <div className="flex items-center gap-1 bg-white border border-amber-300 rounded px-2 py-1 shadow-2xs">
+                    <span className="text-xs font-bold text-slate-400">₹</span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="0"
+                      value={(tempTopUpRates.SP ?? 50) === 0 ? '' : (tempTopUpRates.SP ?? 50)}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => {
+                        const cleaned = e.target.value.replace(/[^0-9.]/g, '').replace(/^0+(?=\d)/, '');
+                        setTempTopUpRates({ ...tempTopUpRates, SP: cleaned === '' ? 0 : parseFloat(cleaned) });
+                      }}
+                      className="w-16 text-right font-mono font-bold text-xs text-amber-950 outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Alteration */}
+                <div className="flex items-center justify-between p-3 rounded-lg border border-rose-200 bg-rose-50/50">
+                  <div>
+                    <span className="font-bold text-xs text-rose-950 block">Alteration & Minor Stitching (ALT)</span>
+                    <span className="text-[11px] text-slate-500">Default rate per garment piece</span>
+                  </div>
+                  <div className="flex items-center gap-1 bg-white border border-rose-300 rounded px-2 py-1 shadow-2xs">
+                    <span className="text-xs font-bold text-slate-400">₹</span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="0"
+                      value={(tempTopUpRates.ALT ?? 40) === 0 ? '' : (tempTopUpRates.ALT ?? 40)}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => {
+                        const cleaned = e.target.value.replace(/[^0-9.]/g, '').replace(/^0+(?=\d)/, '');
+                        setTempTopUpRates({ ...tempTopUpRates, ALT: cleaned === '' ? 0 : parseFloat(cleaned) });
+                      }}
+                      className="w-16 text-right font-mono font-bold text-xs text-rose-950 outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-600 space-y-1">
+                <span className="font-semibold text-slate-800">💡 Tip:</span>
+                <p>When creating orders, you can always click directly on any garment's sub-service price to override it for that specific item.</p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsTopUpConfigModalOpen(false)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveTopUpRates}
+                  className="px-4 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-700 rounded-lg shadow-sm transition"
+                >
+                  Save Default Rates
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

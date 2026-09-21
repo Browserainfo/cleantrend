@@ -143,15 +143,20 @@ export const ReportsScreen: React.FC = () => {
       {/* Main Report Container */}
       <div className="flex-1 flex flex-col p-4 gap-4 overflow-y-auto">
         {/* Metric Overview Strip */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
           <div className="bg-white p-3.5 rounded-lg border border-slate-200 shadow-xs">
             <div className="text-[11px] font-bold text-slate-500 uppercase">Gross Billing</div>
             <div className="text-base font-bold text-slate-900 mt-1 font-mono">₹{totalGross.toFixed(2)}</div>
           </div>
 
-          <div className="bg-white p-3.5 rounded-lg border border-slate-200 shadow-xs">
-            <div className="text-[11px] font-bold text-slate-500 uppercase">Total Orders</div>
-            <div className="text-base font-bold text-slate-800 mt-1 font-mono">{orders.length} Orders</div>
+          <div className="bg-white p-3.5 rounded-lg border border-sky-200 bg-sky-50/20 shadow-xs" id="report-total-orders">
+            <div className="text-[11px] font-bold text-sky-800 uppercase">Total Orders</div>
+            <div className="text-base font-bold text-sky-950 mt-1 font-mono">{orders.length} Orders</div>
+          </div>
+
+          <div className="bg-white p-3.5 rounded-lg border border-emerald-200 bg-emerald-50/20 shadow-xs" id="report-total-customers">
+            <div className="text-[11px] font-bold text-emerald-800 uppercase">Total Customers</div>
+            <div className="text-base font-bold text-emerald-950 mt-1 font-mono">{customers.length} Customers</div>
           </div>
 
           <div className="bg-white p-3.5 rounded-lg border border-rose-200 bg-rose-50/30 shadow-xs">

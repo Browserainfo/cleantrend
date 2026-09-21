@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { 
   Users, 
@@ -16,10 +16,13 @@ import {
   ShoppingBag, 
   X, 
   Check, 
-  Plus 
+  Plus,
+  FileSpreadsheet,
+  Download
 } from 'lucide-react';
-import { Customer } from '../../types';
+import { Customer, Order } from '../../types';
 import { normalizeIndianPhoneNumber, formatIndianPhoneNumberDisplay } from '../../utils/phoneUtils';
+import { exportCustomersToExcel } from '../../utils/exportCustomerUtils';
 
 export const CustomerScreen: React.FC = () => {
   const { 
@@ -81,7 +84,172 @@ export const CustomerScreen: React.FC = () => {
     || (activeCustomerId ? customers.find(c => c.id === activeCustomerId) : undefined)
     || (customers.length > 0 ? customers[0] : null);
 
-  const customerOrders = selectedCustomer ? orders.filter(o => o.customerId === selectedCustomer.id) : [];
+  // Pre-index orders strictly by customerId for fast, accurate linking
+  const ordersByCustomerId = useMemo(() => {
+    const map = new Map<string, Order[]>();
+    for (const order of orders) {
+      if (order.customerId) {
+        const list = map.get(order.customerId);
+        if (list) {
+          list.push(order);
+        } else {
+          map.set(order.customerId, [order]);
+        }
+      }
+    }
+    return map;
+  }, [orders]);
+
+  // Linked orders for the currently selected customer using Customer ID
+  const customerOrders = useMemo(() => {
+    if (!selectedCustomer) return [];
+    return (ordersByCustomerId.get(selectedCustomer.id) || [])
+      .slice()
+      .sort((a, b) => {
+        if (b.orderNumber !== a.orderNumber) {
+          return b.orderNumber - a.orderNumber;
+        }
+        return new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime();
+      });
+  }, [ordersByCustomerId, selectedCustomer]);
+
+  // Customer Financial Metrics Summary (Total Orders, Total Billed, Total Paid, Balance Due)
+  const customerSummary = useMemo(() => {
+    if (!selectedCustomer) {
+      return { totalOrders: 0, totalBilled: 0, totalPaid: 0, balanceDue: 0 };
+    }
+    const totalOrders = customerOrders.length;
+    const totalBilled = customerOrders.reduce((sum, o) => sum + (Number(o.netAmount) || 0), 0);
+    const totalPaid = customerOrders.reduce((sum, o) => {
+      const net = Number(o.netAmount) || 0;
+      const bal = Number(o.balanceDue) || 0;
+      return sum + Math.max(0, net - bal);
+    }, 0);
+    const balanceDue = totalOrders > 0
+      ? customerOrders.reduce((sum, o) => sum + Math.max(0, Number(o.balanceDue) || 0), 0)
+      : (selectedCustomer.outstandingAmount || 0);
+
+    return {
+      totalOrders,
+      totalBilled,
+      totalPaid,
+      balanceDue
+    };
+  }, [selectedCustomer, customerOrders]);
+
+  // Helper to determine payment status badge and text
+  const getPaymentStatusBadge = (order: Order) => {
+    const net = Number(order.netAmount) || 0;
+    const bal = Math.max(0, Number(order.balanceDue) || 0);
+    const paid = Math.max(0, net - bal);
+
+    if (bal <= 0 || paid >= net) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+          <Check className="w-3 h-3 text-emerald-600" />
+          <span>Paid</span>
+        </span>
+      );
+    }
+
+    if (paid > 0) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+          <span>Partially Paid (Paid: ₹{paid.toFixed(0)})</span>
+        </span>
+      );
+    }
+
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
+        <span>Unpaid</span>
+      </span>
+    );
+  };
+
+  // Helper to determine delivery status badge
+  const getDeliveryStatusBadge = (status: string) => {
+    switch (status) {
+      case 'DELIVERED':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+            <Check className="w-3 h-3 text-emerald-600" />
+            <span>Delivered</span>
+          </span>
+        );
+      case 'READY':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 text-sky-800 border border-sky-300">
+            <span>Ready</span>
+          </span>
+        );
+      case 'PARTIALLY_DELIVERED':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-300">
+            <span>Partial Delivered</span>
+          </span>
+        );
+      case 'IN_PROCESS':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-300">
+            <span>In Process</span>
+          </span>
+        );
+      case 'CANCELLED':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
+            <span>Cancelled</span>
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+            <span>{status.replace(/_/g, ' ')}</span>
+          </span>
+        );
+    }
+  };
+
+  // Helper to determine the pending balance of the customer's previous/last order
+  const getLastOrderPendingInfo = (currentOrder: Order) => {
+    // 1. If the order has a recorded previous snapshot, use it
+    if (currentOrder.previousOrderPending !== undefined && currentOrder.previousOrderPending !== null) {
+      return {
+        amount: Number(currentOrder.previousOrderPending) || 0,
+        orderNumber: currentOrder.previousOrderNumber,
+        isFirstOrder: false
+      };
+    }
+
+    // 2. Otherwise calculate chronologically from customer's prior orders
+    const priorOrders = orders
+      .filter(o => o.customerId === currentOrder.customerId && o.id !== currentOrder.id)
+      .filter(o => {
+        if (o.orderNumber && currentOrder.orderNumber) {
+          return o.orderNumber < currentOrder.orderNumber;
+        }
+        return new Date(o.orderDate).getTime() < new Date(currentOrder.orderDate).getTime();
+      })
+      .sort((a, b) => {
+        if (b.orderNumber !== a.orderNumber) return b.orderNumber - a.orderNumber;
+        return new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime();
+      });
+
+    const lastOrder = priorOrders[0];
+    if (!lastOrder) {
+      return {
+        amount: 0,
+        orderNumber: undefined,
+        isFirstOrder: true
+      };
+    }
+
+    return {
+      amount: Number(lastOrder.balanceDue) || 0,
+      orderNumber: lastOrder.orderNumber,
+      isFirstOrder: false
+    };
+  };
 
   const handleCreateCustomer = (e: React.FormEvent) => {
     e.preventDefault();
@@ -165,10 +333,24 @@ export const CustomerScreen: React.FC = () => {
     showToast(`Starting new POS booking for customer ${cust.name} (${cust.mobile})`, 'info');
   };
 
+  const handleExportToExcel = () => {
+    try {
+      if (!customers || customers.length === 0) {
+        showToast('No customer records found to export.', 'warning');
+        return;
+      }
+      const result = exportCustomersToExcel(customers, orders, businessSettings);
+      showToast(`Exported ${result.count} customer records to ${result.filename}`, 'success');
+    } catch (err: any) {
+      console.error('Error exporting customers to Excel:', err);
+      showToast(err?.message || 'Failed to generate Excel file.', 'error');
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col bg-slate-100 overflow-hidden">
       {/* Module Title Bar */}
-      <div className="bg-white border-b border-slate-200 px-6 py-3.5 flex items-center justify-between shadow-xs">
+      <div className="bg-white border-b border-slate-200 px-6 py-3.5 flex flex-wrap items-center justify-between gap-3 shadow-xs">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-sky-600 flex items-center justify-center text-white shadow-xs">
             <Users className="w-4 h-4" />
@@ -179,13 +361,25 @@ export const CustomerScreen: React.FC = () => {
           </div>
         </div>
 
-        <button
-          onClick={() => setIsNewCustModalOpen(true)}
-          className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded font-bold text-xs flex items-center gap-1.5 shadow-xs transition"
-        >
-          <UserPlus className="w-4 h-4" />
-          <span>Add New Customer</span>
-        </button>
+        <div className="flex items-center gap-2.5">
+          <button
+            id="btn-export-customers-excel"
+            onClick={handleExportToExcel}
+            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-bold text-xs flex items-center gap-1.5 shadow-xs transition active:scale-[0.98]"
+            title="Download all stored customer records into an Excel (.xlsx) file"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            <span>Export to Excel</span>
+          </button>
+
+          <button
+            onClick={() => setIsNewCustModalOpen(true)}
+            className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded font-bold text-xs flex items-center gap-1.5 shadow-xs transition active:scale-[0.98]"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>Add New Customer</span>
+          </button>
+        </div>
       </div>
 
       {/* Main 2-Column Layout */}
@@ -206,7 +400,14 @@ export const CustomerScreen: React.FC = () => {
             </div>
             <div className="mt-2 flex items-center justify-between text-[11px] text-slate-500 px-1">
               <span>{filteredCustomers.length} Customers Found</span>
-              <span className="font-semibold text-slate-700">Total: {customers.length}</span>
+              <button
+                onClick={handleExportToExcel}
+                className="text-emerald-700 hover:text-emerald-800 font-bold flex items-center gap-1 hover:underline transition"
+                title="Export all customers to Excel"
+              >
+                <Download className="w-3 h-3" />
+                <span>Export ({customers.length})</span>
+              </button>
             </div>
           </div>
 
@@ -214,6 +415,9 @@ export const CustomerScreen: React.FC = () => {
           <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
             {filteredCustomers.map(cust => {
               const isSelected = cust.id === (selectedCustomer?.id || selectedCustomerId);
+              const custOrders = ordersByCustomerId.get(cust.id) || [];
+              const orderCount = custOrders.length;
+
               return (
                 <div
                   key={cust.id}
@@ -225,14 +429,17 @@ export const CustomerScreen: React.FC = () => {
                     isSelected ? 'bg-sky-50 border-l-4 border-sky-600' : 'hover:bg-slate-50'
                   }`}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
+                  <div className="flex items-center justify-between gap-1.5">
+                    <div className="font-bold text-xs text-slate-900 flex items-center gap-1.5 flex-wrap">
                       <span>{cust.name}</span>
                       <span className="text-[10px] font-mono font-semibold px-1.5 py-0.2 bg-slate-200 text-slate-700 rounded">
                         {cust.custCode}
                       </span>
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 bg-sky-50 text-sky-700 rounded border border-sky-200">
+                        Orders: {orderCount}
+                      </span>
                     </div>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 shrink-0">
                       {cust.outstandingAmount > 0 ? (
                         <span className="text-[11px] font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
                           Due: ₹{cust.outstandingAmount.toFixed(0)}
@@ -267,8 +474,8 @@ export const CustomerScreen: React.FC = () => {
                     <span className="truncate">{cust.address || 'Address not provided'}</span>
                   </div>
 
-                  <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-100 mt-0.5">
-                    <span>{cust.totalOrdersCount} Total Orders</span>
+                  <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1 border-t border-slate-100 mt-0.5">
+                    <span className="font-semibold text-sky-800">Orders: {orderCount}</span>
                     <span>Last visit: {cust.lastVisit}</span>
                   </div>
                 </div>
@@ -283,14 +490,21 @@ export const CustomerScreen: React.FC = () => {
             {/* Customer Header Details */}
             <div className="p-5 border-b border-slate-200 bg-slate-50 flex flex-wrap items-start justify-between gap-4">
               <div className="space-y-1">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="text-lg font-bold text-slate-900">{selectedCustomer.name}</h2>
                   <span className="bg-sky-100 text-sky-800 text-xs font-bold px-2 py-0.5 rounded font-mono border border-sky-300">
                     {selectedCustomer.custCode}
                   </span>
-                  {selectedCustomer.outstandingAmount > 0 && (
+                  <span className="bg-sky-50 text-sky-700 text-xs font-bold px-2 py-0.5 rounded border border-sky-200">
+                    Orders: {customerSummary.totalOrders}
+                  </span>
+                  {customerSummary.balanceDue > 0 ? (
                     <span className="bg-rose-100 text-rose-800 text-xs font-bold px-2 py-0.5 rounded border border-rose-300">
-                      Balance Due: ₹{selectedCustomer.outstandingAmount.toFixed(2)}
+                      Balance Due: ₹{customerSummary.balanceDue.toFixed(2)}
+                    </span>
+                  ) : (
+                    <span className="bg-emerald-100 text-emerald-800 text-xs font-bold px-2 py-0.5 rounded border border-emerald-300">
+                      Settled (₹0.00 Due)
                     </span>
                   )}
                 </div>
@@ -353,25 +567,25 @@ export const CustomerScreen: React.FC = () => {
               </div>
             </div>
 
-            {/* Quick Metrics Bar */}
+            {/* Quick Metrics Bar: Total Orders, Total Billed, Total Paid and Balance Due */}
             <div className="grid grid-cols-4 border-b border-slate-200 divide-x divide-slate-200 bg-white text-center py-3">
               <div>
                 <div className="text-[11px] text-slate-500 uppercase font-semibold">Total Orders</div>
-                <div className="text-base font-bold text-slate-900">{selectedCustomer.totalOrdersCount}</div>
+                <div className="text-base font-bold text-slate-900">{customerSummary.totalOrders}</div>
               </div>
               <div>
-                <div className="text-[11px] text-slate-500 uppercase font-semibold">Pending Orders</div>
-                <div className="text-base font-bold text-amber-600">{selectedCustomer.pendingOrdersCount}</div>
+                <div className="text-[11px] text-slate-500 uppercase font-semibold">Total Billed</div>
+                <div className="text-base font-bold text-slate-900">₹{customerSummary.totalBilled.toFixed(2)}</div>
               </div>
               <div>
-                <div className="text-[11px] text-slate-500 uppercase font-semibold">Outstanding Balance</div>
-                <div className={`text-base font-bold ${selectedCustomer.outstandingAmount > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                  ₹{selectedCustomer.outstandingAmount.toFixed(2)}
+                <div className="text-[11px] text-slate-500 uppercase font-semibold">Total Paid</div>
+                <div className="text-base font-bold text-emerald-600">₹{customerSummary.totalPaid.toFixed(2)}</div>
+              </div>
+              <div>
+                <div className="text-[11px] text-slate-500 uppercase font-semibold">Balance Due</div>
+                <div className={`text-base font-bold ${customerSummary.balanceDue > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                  ₹{customerSummary.balanceDue.toFixed(2)}
                 </div>
-              </div>
-              <div>
-                <div className="text-[11px] text-slate-500 uppercase font-semibold">Last Visit</div>
-                <div className="text-base font-bold text-slate-700">{selectedCustomer.lastVisit}</div>
               </div>
             </div>
 
@@ -388,67 +602,102 @@ export const CustomerScreen: React.FC = () => {
                 <table className="w-full text-left text-xs border-collapse">
                   <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 sticky top-0">
                     <tr>
-                      <th className="p-2.5">Order #</th>
+                      <th className="p-2.5">Order No.</th>
                       <th className="p-2.5">Date</th>
                       <th className="p-2.5">Garments</th>
-                      <th className="p-2.5">Due Date</th>
-                      <th className="p-2.5">Net Amount</th>
+                      <th className="p-2.5">Amount</th>
+                      <th className="p-2.5">Payment Status</th>
+                      <th className="p-2.5">Delivery Status</th>
                       <th className="p-2.5">Balance Due</th>
-                      <th className="p-2.5">Status</th>
+                      <th className="p-2.5 whitespace-nowrap text-slate-700">Last Order Pending</th>
                       <th className="p-2.5 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {customerOrders.map(order => (
-                      <tr key={order.id} className="hover:bg-slate-50/80 transition">
-                        <td className="p-2.5 font-bold font-mono text-sky-700">
-                          #{order.orderNumber}
-                        </td>
-                        <td className="p-2.5 text-slate-600 whitespace-nowrap">
-                          {order.orderDate}
-                        </td>
-                        <td className="p-2.5 text-slate-800 font-medium">
-                          {order.totalPieces} Pcs ({order.items.map(i => i.garmentName).slice(0, 2).join(', ')}{order.items.length > 2 ? '...' : ''})
-                        </td>
-                        <td className="p-2.5 text-slate-600 font-mono">
-                          {order.dueDate}
-                        </td>
-                        <td className="p-2.5 font-bold text-slate-900">
-                          ₹{order.netAmount.toFixed(2)}
-                        </td>
-                        <td className="p-2.5 font-bold">
-                          {order.balanceDue > 0 ? (
-                            <span className="text-rose-600">₹{order.balanceDue.toFixed(2)}</span>
-                          ) : (
-                            <span className="text-emerald-700">₹0.00 (Paid)</span>
-                          )}
-                        </td>
-                        <td className="p-2.5">
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            order.status === 'DELIVERED' ? 'bg-emerald-100 text-emerald-800' :
-                            order.status === 'READY' ? 'bg-sky-100 text-sky-800' :
-                            order.status === 'PARTIALLY_DELIVERED' ? 'bg-purple-100 text-purple-800' :
-                            'bg-amber-100 text-amber-800'
-                          }`}>
-                            {order.status.replace(/_/g, ' ')}
-                          </span>
-                        </td>
-                        <td className="p-2.5 text-right">
-                          <button
-                            onClick={() => {
-                              setActiveOrderId(order.id);
-                              setActiveView('PICKUP');
-                            }}
-                            className="px-2.5 py-1 bg-slate-100 hover:bg-sky-50 text-sky-700 border border-slate-300 rounded font-semibold text-[11px] transition"
-                          >
-                            Open Handover
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    {customerOrders.map(order => {
+                      const lastPending = getLastOrderPendingInfo(order);
+                      return (
+                        <tr key={order.id} className="hover:bg-slate-50/80 transition">
+                          <td className="p-2.5 font-bold font-mono text-sky-700">
+                            #{order.orderNumber}
+                          </td>
+                          <td className="p-2.5 text-slate-600 whitespace-nowrap">
+                            {order.orderDate}
+                          </td>
+                          <td className="p-2.5 text-slate-800 font-medium">
+                            {order.totalPieces} Pcs ({order.items.map(i => i.garmentName).slice(0, 2).join(', ')}{order.items.length > 2 ? '...' : ''})
+                          </td>
+                          <td className="p-2.5 font-bold text-slate-900 font-mono">
+                            ₹{order.netAmount.toFixed(2)}
+                          </td>
+                          <td className="p-2.5">
+                            {getPaymentStatusBadge(order)}
+                          </td>
+                          <td className="p-2.5">
+                            {getDeliveryStatusBadge(order.status)}
+                          </td>
+                          <td className="p-2.5 font-bold">
+                            {order.balanceDue > 0 ? (
+                              <span className="text-rose-600 font-mono">₹{order.balanceDue.toFixed(2)}</span>
+                            ) : (
+                              <span className="text-emerald-700 font-mono">₹0.00</span>
+                            )}
+                          </td>
+                          <td className="p-2.5">
+                            {lastPending.amount > 0 ? (
+                              <div>
+                                <span className="font-bold font-mono text-rose-600">
+                                  ₹{lastPending.amount.toFixed(2)}
+                                </span>
+                                {lastPending.orderNumber ? (
+                                  <span className="text-[10px] text-slate-500 block font-normal">
+                                    from #{lastPending.orderNumber}
+                                  </span>
+                                ) : null}
+                              </div>
+                            ) : lastPending.isFirstOrder ? (
+                              <div>
+                                <span className="font-mono text-slate-400 font-medium">₹0.00</span>
+                                <span className="text-[9.5px] text-slate-400 block italic">First Order</span>
+                              </div>
+                            ) : (
+                              <div>
+                                <span className="font-mono text-emerald-700 font-semibold">₹0.00</span>
+                                {lastPending.orderNumber ? (
+                                  <span className="text-[9.5px] text-slate-400 block">
+                                    (#{lastPending.orderNumber} Clear)
+                                  </span>
+                                ) : null}
+                              </div>
+                            )}
+                          </td>
+                          <td className="p-2.5 text-right whitespace-nowrap space-x-1.5">
+                            <button
+                              onClick={() => {
+                                setActiveOrderId(order.id);
+                                setActiveView('ORDERS');
+                              }}
+                              className="px-2 py-1 bg-white hover:bg-sky-50 text-sky-700 border border-sky-300 rounded font-semibold text-[11px] transition shadow-2xs"
+                              title="Edit order items, delivery, discount, or payment"
+                            >
+                              Edit Order
+                            </button>
+                            <button
+                              onClick={() => {
+                                setActiveOrderId(order.id);
+                                setActiveView('PICKUP');
+                              }}
+                              className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded font-semibold text-[11px] transition"
+                            >
+                              Handover
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                     {customerOrders.length === 0 && (
                       <tr>
-                        <td colSpan={8} className="p-8 text-center text-slate-400">
+                        <td colSpan={9} className="p-8 text-center text-slate-400">
                           No orders on record for this customer yet. Click "New Drop Order" above to create one.
                         </td>
                       </tr>

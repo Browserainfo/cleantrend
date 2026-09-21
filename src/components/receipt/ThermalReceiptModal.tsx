@@ -22,6 +22,7 @@ import { printThermalBookingReceipt } from '../../utils/printUtils';
 import { printBridgeService, BridgeStatus } from '../../services/printBridgeService';
 import { buildOrderWhatsAppMessage } from '../../services/notificationService';
 import { normalizeIndianPhoneNumber } from '../../utils/phoneUtils';
+import { Customer } from '../../types';
 
 export const ThermalReceiptModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
   const { 
@@ -30,6 +31,7 @@ export const ThermalReceiptModal: React.FC<{ isOpen: boolean; onClose: () => voi
     customers,
     businessSettings, 
     currentRole, 
+    loadOrderForEditing,
     setWhatsAppModalOpen, 
     showToast 
   } = useApp();
@@ -49,14 +51,20 @@ export const ThermalReceiptModal: React.FC<{ isOpen: boolean; onClose: () => voi
   if (!isOpen || !order) return null;
 
   const isManager = currentRole === 'MANAGER';
-  const customer = customers.find(c => c.id === order.customerId) || {
+  const customer: Customer = customers.find(c => c.id === order.customerId) || {
     id: order.customerId || 'cust-1',
     name: order.customerName,
     mobile: order.customerMobile || '',
     email: '',
-    custCode: '',
+    custCode: 'Cust-0',
     address: order.customerAddress || '',
-    placeOfSupply: order.customerPlaceOfSupply || ''
+    area: '',
+    placeOfSupply: order.customerPlaceOfSupply || '',
+    outstandingAmount: 0,
+    pendingOrdersCount: 0,
+    totalOrdersCount: 0,
+    lastVisit: '0 Day ago',
+    createdAt: new Date().toISOString()
   };
 
   const handlePrint = async () => {
@@ -107,11 +115,11 @@ export const ThermalReceiptModal: React.FC<{ isOpen: boolean; onClose: () => voi
   };
 
   const handleEditBooking = () => {
-    if (isManager) {
-      showToast('ANTI-FRAUD PROTECTION: Manager is strictly forbidden from editing orders or changing financial details.', 'error');
+    if (isManager && !businessSettings.allowManagerEditBooking) {
+      showToast('ANTI-FRAUD PROTECTION: Manager role cannot modify finalized bookings. Please switch to Admin (Owner) role in top bar.', 'error');
       return;
     }
-    showToast('Navigating to Order Editor (Admin Authorized).', 'info');
+    loadOrderForEditing(order);
     onClose();
   };
 

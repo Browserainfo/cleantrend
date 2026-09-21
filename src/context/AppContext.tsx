@@ -13,7 +13,8 @@ import {
   PaymentTransaction,
   WhatsAppTriggerType,
   PressingMethod,
-  DEFAULT_PRESSING_METHOD
+  DEFAULT_PRESSING_METHOD,
+  GarmentMaster
 } from '../types';
 import { normalizeIndianPhoneNumber } from '../utils/phoneUtils';
 import { 
@@ -64,7 +65,15 @@ interface AppContextType {
     email?: string;
     mobile?: string;
     password: string;
+    role?: UserRole;
     assignedStore?: string;
+    discountLimitPercent?: number;
+    isActive?: boolean;
+    canEditOrders?: boolean;
+    canModifyPrices?: boolean;
+    canApplyDiscounts?: boolean;
+    canManageSettings?: boolean;
+    canDeliverOrders?: boolean;
   }) => Promise<{ success: boolean; message?: string; user?: User }>;
   updateUserStatus: (userId: string, isActive: boolean) => Promise<{ success: boolean; message?: string }>;
   resetUserPassword: (userId: string, newPassword: string) => Promise<{ success: boolean; message?: string }>;
@@ -86,6 +95,12 @@ interface AppContextType {
   activeCustomerId: string;
   setActiveCustomerId: (id: string) => void;
   selectedOrder: Order | undefined;
+  editingOrderId: string | null;
+  setEditingOrderId: (id: string | null) => void;
+  editingOrderData: Order | null;
+  setEditingOrderData: (order: Order | null) => void;
+  loadOrderForEditing: (orderOrId: Order | string) => void;
+  cancelEditingOrder: () => void;
   
   // Anti-fraud & Order actions
   createOrder: (orderData: Partial<Order>) => { success: boolean; orderId?: string; order?: Order; error?: string; message?: string };
@@ -101,6 +116,7 @@ interface AppContextType {
   updateGarmentPressingMethod: (orderId: string, barcode: string, pressingMethod: PressingMethod) => void;
   updateGarmentDetails: (orderId: string, barcode: string, updates: Partial<OrderGarmentItem>) => void;
   recordPayment: (orderId: string, amount: number, method: PaymentTransaction['paymentMethod'], channel: PaymentTransaction['channel'], referenceId?: string, differenceAction?: 'WAIVE' | 'CARRY_FORWARD', differenceAmount?: number) => { success: boolean };
+  submitOrderUpiRef: (orderId: string, utrNumber: string) => { success: boolean; error?: string };
   completeDelivery: (orderId: string, deliveredBarcodes: string[], signatureData?: string, paymentAmount?: number, paymentMethod?: PaymentTransaction['paymentMethod'], differenceAction?: 'WAIVE' | 'CARRY_FORWARD', differenceAmount?: number) => { success: boolean; order?: Order };
   recordGarmentReturn: (orderId: string, barcode: string, reason: string) => void;
   resendPaymentLink: (orderId: string) => void;
@@ -115,10 +131,13 @@ interface AppContextType {
   // UI Modals
   isWhatsAppSimulatorOpen: boolean;
   setWhatsAppSimulatorOpen: (open: boolean) => void;
+  setWhatsAppModalOpen?: (open: boolean) => void;
   isThermalReceiptModalOpen: boolean;
   setThermalReceiptModalOpen: (open: boolean) => void;
   isQRTagPreviewModalOpen: boolean;
   setQRTagPreviewModalOpen: (open: boolean) => void;
+  setGarmentTagPrintModalOpen?: (open: boolean) => void;
+  catalog?: GarmentMaster[];
   isCustomerPortalOpen: boolean;
   setCustomerPortalOpen: (open: boolean) => void;
   isPublicPortalMode: boolean;
@@ -150,6 +169,7 @@ interface AppContextType {
   showToast: (text: string, type?: 'success' | 'error' | 'info' | 'warning') => void;
   hideToast: () => void;
   resetToDefaults: () => void;
+  restoreBackupData: (backupData: any) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -186,11 +206,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           parsed.branchCode = 'TE02';
         }
         if (parsed.businessName && parsed.businessName.includes('Cleanera')) {
-          parsed.businessName = 'Trendera Dry Cleaning CRM';
+          parsed.businessName = 'Trendera Dry Cleaning';
           parsed.displayName = 'Trendera Dry Cleaning - Noida';
           parsed.legalName = 'Trendera Services Private Limited';
           parsed.email = 'support@trendera.com';
           parsed.website = 'https://trendera.com';
+        }
+        if (!parsed.storeName) {
+          parsed.storeName = 'Trendera';
         }
         return { ...initialBusinessSettings, ...parsed };
       } catch (e) {
@@ -205,13 +228,65 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        return parsed.map((o: Order) => ({
-          ...o,
-          branchCode: o.branchCode === 'DC02' ? 'TE02' : (o.branchCode || 'TE02'),
-          receiptUrl: o.receiptUrl
-            ?.replace('qdc5.quickdrycleaning.com/PaymentLinkTesting/InvoiceDetails.aspx', 'cleanera.app/portal/invoice')
-            ?.replace(/Reciept=DC02-/g, 'Reciept=TE02-') || o.receiptUrl
-        }));
+        return parsed.map((o: Order) => {
+          const itemsGross = Array.isArray(o.items) && o.items.length > 0
+            ? o.items.reduce((sum: number, item: any) => sum + (Number(item.totalItemPrice) || 0), 0)
+            : o.grossAmount;
+          
+          let fixedGross = o.grossAmount;
+          let fixedDiscountAmt = o.discountAmount;
+          let fixedNetAmount = o.netAmount;
+          let fixedRoundOff = o.roundOff;
+          let fixedBalanceDue = o.balanceDue;
+
+          // If grossAmount erroneously included delivery charge (e.g. gross 718 = items 668 + delivery 50)
+          if (itemsGross > 0 && o.deliveryCharge && Math.abs(o.grossAmount - (itemsGross + o.deliveryCharge)) < 0.01) {
+            fixedGross = itemsGross;
+            fixedDiscountAmt = Number(((fixedGross * (o.discountPercent || 0)) / 100).toFixed(2));
+            const subtotal = fixedGross + (o.deliveryCharge || 0) + (o.surchargeAmount || 0) - fixedDiscountAmt;
+            fixedNetAmount = Math.round(subtotal);
+            fixedRoundOff = Number((fixedNetAmount - subtotal).toFixed(2));
+            fixedBalanceDue = Math.max(0, fixedNetAmount - (o.advancePaid || 0));
+          }
+
+          // Clean up any unverified mock online self-service portal payments that erroneously marked order as paid
+          let realPayments = Array.isArray(o.payments) ? o.payments : [];
+          const hadMockOnline = realPayments.some((p: any) => 
+            p.channel === 'ONLINE_PORTAL' || 
+            p.collectedBy === 'Payment Gateway' || 
+            p.collectedBy === 'Online Portal Gateway' ||
+            p.notes === 'Online self-service portal payment' ||
+            (typeof p.referenceNumber === 'string' && p.referenceNumber.startsWith('ONL-'))
+          );
+          let realAdvance = o.advancePaid || 0;
+          if (hadMockOnline) {
+            realPayments = realPayments.filter((p: any) => 
+              !(p.channel === 'ONLINE_PORTAL' || 
+                p.collectedBy === 'Payment Gateway' || 
+                p.collectedBy === 'Online Portal Gateway' ||
+                p.notes === 'Online self-service portal payment' ||
+                (typeof p.referenceNumber === 'string' && p.referenceNumber.startsWith('ONL-')))
+            );
+            const sumOfRealPayments = realPayments.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0);
+            realAdvance = sumOfRealPayments > 0 ? sumOfRealPayments : (o.orderNumber === 47 ? 100 : 0);
+            fixedBalanceDue = Math.max(0, fixedNetAmount - realAdvance);
+          }
+
+          return {
+            ...o,
+            grossAmount: fixedGross,
+            discountAmount: fixedDiscountAmt,
+            netAmount: fixedNetAmount,
+            roundOff: fixedRoundOff,
+            advancePaid: realAdvance,
+            balanceDue: fixedBalanceDue,
+            payments: realPayments,
+            branchCode: o.branchCode === 'DC02' ? 'TE02' : (o.branchCode || 'TE02'),
+            receiptUrl: o.receiptUrl
+              ?.replace('qdc5.quickdrycleaning.com/PaymentLinkTesting/InvoiceDetails.aspx', 'cleanera.app/portal/invoice')
+              ?.replace(/Reciept=DC02-/g, 'Reciept=TE02-') || o.receiptUrl
+          };
+        });
       } catch (e) {
         return initialOrders;
       }
@@ -347,10 +422,81 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [isAuthenticated]);
 
   const [activeView, setActiveView] = useState<string>('HOME'); // Default to HOME screen for operational counter staff landing
-  const [activeOrderId, setActiveOrderId] = useState<string>('ord-4');
+  const [activeOrderId, setActiveOrderId] = useState<string>('');
   const [activeCustomerId, setActiveCustomerId] = useState<string>(() => {
     return initialCustomers[0]?.id || 'cust-1';
   });
+  const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
+  const [editingOrderData, setEditingOrderData] = useState<Order | null>(null);
+
+  const loadOrderForEditing = (orderOrId: Order | string) => {
+    let targetOrder: Order | undefined;
+    if (typeof orderOrId === 'object' && orderOrId !== null) {
+      targetOrder = orderOrId;
+    } else {
+      const searchKey = String(orderOrId).trim();
+      targetOrder = orders.find(o => 
+        o.id === searchKey || 
+        String(o.orderNumber) === searchKey || 
+        o.id === `ord-${searchKey}` ||
+        o.barcode === searchKey
+      );
+      if (!targetOrder) {
+        try {
+          const saved = localStorage.getItem('cleanera_orders');
+          if (saved) {
+            const parsed: Order[] = JSON.parse(saved);
+            targetOrder = parsed.find(o => 
+              o.id === searchKey || 
+              String(o.orderNumber) === searchKey || 
+              o.id === `ord-${searchKey}`
+            );
+          }
+        } catch (e) {
+          console.error('Failed to parse cleanera_orders from localStorage', e);
+        }
+      }
+    }
+
+    if (!targetOrder) {
+      showToast('Order not found for editing.', 'error');
+      return;
+    }
+
+    // Ensure order is present in orders state
+    setOrders(prev => {
+      const existingIdx = prev.findIndex(o => o.id === targetOrder!.id || o.orderNumber === targetOrder!.orderNumber);
+      if (existingIdx >= 0) {
+        const next = [...prev];
+        next[existingIdx] = { ...next[existingIdx], ...targetOrder! };
+        return next;
+      }
+      return [targetOrder!, ...prev];
+    });
+
+    setEditingOrderId(targetOrder.id);
+    setEditingOrderData(targetOrder);
+    setActiveOrderId(targetOrder.id);
+    setActiveCustomerId(targetOrder.customerId);
+    setThermalReceiptModalOpen(false);
+    setActiveView('DROP');
+
+    // Notify POS workspace via window event
+    try {
+      window.dispatchEvent(new CustomEvent('trendera_load_order_for_editing', {
+        detail: targetOrder
+      }));
+    } catch (e) {
+      console.warn('Dispatch load order event note:', e);
+    }
+
+    showToast(`Order #${targetOrder.orderNumber} loaded into Booking POS (${targetOrder.items?.length || 0} items) for editing.`, 'info');
+  };
+
+  const cancelEditingOrder = () => {
+    setEditingOrderId(null);
+    setEditingOrderData(null);
+  };
 
   // Modals state
   const [isWhatsAppSimulatorOpen, setWhatsAppSimulatorOpen] = useState<boolean>(false);
@@ -545,7 +691,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     email?: string;
     mobile?: string;
     password: string;
+    role?: UserRole;
     assignedStore?: string;
+    discountLimitPercent?: number;
+    isActive?: boolean;
+    canEditOrders?: boolean;
+    canModifyPrices?: boolean;
+    canApplyDiscounts?: boolean;
+    canManageSettings?: boolean;
+    canDeliverOrders?: boolean;
   }) => {
     if (currentRole !== 'ADMIN') {
       showToast('SECURITY: Only Admin can create manager accounts.', 'error');
@@ -637,7 +791,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setAuditLogs(prev => [newLog, ...prev]);
   };
 
-  const selectedOrder = orders.find(o => o.id === activeOrderId) || orders[0];
+  const selectedOrder = orders.find(o => 
+    o.id === activeOrderId || 
+    String(o.orderNumber) === String(activeOrderId) || 
+    o.id === `ord-${activeOrderId}`
+  ) || orders[0];
 
   // STRICT ADMIN RBAC FOR SETTINGS
   const updateBusinessSettings = (newSettings: Partial<BusinessSettings>) => {
@@ -647,10 +805,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const name = (newSettings.businessName || (newSettings as any).storeName || newSettings.displayName || businessSettings.businessName || '').trim();
+    const storeName = (newSettings.storeName || businessSettings.storeName || newSettings.businessName || businessSettings.businessName || 'Trendera').trim();
 
     const updated: BusinessSettings = {
       ...businessSettings,
       ...newSettings,
+      storeName,
       businessName: name || businessSettings.businessName,
       displayName: (newSettings.displayName || name || businessSettings.displayName || '').trim(),
       legalName: (newSettings.legalName || name || businessSettings.legalName || '').trim()
@@ -732,7 +892,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     switch (type) {
       case 'ORDER_CREATED':
-        msgText = buildOrderWhatsAppMessage(order, cust, businessSettings, absoluteQr);
+        msgText = buildOrderWhatsAppMessage(order, cust, businessSettings);
         break;
       case 'PICKUP_SCHEDULED':
         msgText = `Dear ${order.customerName},\nYour pick up request with ${businessSettings.businessName} for Date: ${order.pickupDate || 'Today'} and Time: ${order.pickupTimeSlot || '4:30 PM – 6:00 PM'} has been placed successfully.\n${effectiveReceiptUrl}`;
@@ -762,9 +922,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       triggerType: type,
       messageText: msgText,
       receiptUrl: effectiveReceiptUrl,
-      mediaUrl: resolvedQr,
-      mediaType: resolvedQr ? 'IMAGE' : undefined,
-      qrImageUrl: absoluteQr || resolvedQr,
+      mediaUrl: type === 'ORDER_CREATED' ? undefined : resolvedQr,
+      mediaType: type === 'ORDER_CREATED' ? undefined : (resolvedQr ? 'IMAGE' : undefined),
+      qrImageUrl: type === 'ORDER_CREATED' ? undefined : (absoluteQr || resolvedQr),
       orderNumber: order.orderNumber,
       timestamp: timeStr,
       status: 'SENT',
@@ -851,23 +1011,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const cust = customers.find(c => c.id === custId) || customers[0];
 
     const totalPcs = orderData.items?.reduce((sum, item) => sum + (item.quantity || 1), 0) || 1;
-    const gross = orderData.grossAmount || 0;
-    const discount = orderData.discountAmount || 0;
+    const gross = orderData.grossAmount !== undefined 
+      ? orderData.grossAmount 
+      : (orderData.items?.reduce((sum, item) => sum + (Number(item.totalItemPrice) || 0), 0) || 0);
+    const delivery = Number(orderData.deliveryCharge || 0);
+    const surcharge = Number(orderData.surchargeAmount || 0);
+    const discount = Number(orderData.discountAmount || 0);
     const appliedAdj = Number((orderData as any).appliedAdjustment || orderData.adjustmentApplied || 0);
-    const rawTotal = Math.max(0, gross - discount + appliedAdj);
+    const rawTotal = Math.max(0, gross + delivery + surcharge - discount + appliedAdj);
     const roundedTotal = orderData.netAmount !== undefined ? orderData.netAmount : Math.round(rawTotal);
     const roundOff = orderData.roundOff !== undefined ? orderData.roundOff : Number((roundedTotal - rawTotal).toFixed(2));
-    const advance = orderData.advancePaid || 0;
+    const advance = Number(orderData.advancePaid || 0);
 
     const diffAction = (orderData as any).differenceAction as 'WAIVE' | 'CARRY_FORWARD' | undefined;
     const diffAmount = Number((orderData as any).differenceAmount || 0);
 
-    let balance = Math.max(0, roundedTotal - advance);
+    let balance = (orderData.balanceDue !== undefined && orderData.balanceDue !== null)
+      ? Number(orderData.balanceDue)
+      : Math.max(0, roundedTotal - advance);
     if (diffAction === 'WAIVE' || diffAction === 'CARRY_FORWARD') {
       balance = 0; // Settled difference
     }
 
     const chosenMethod = (orderData as any).advancePaymentMethod || (orderData as any).paymentMethod || 'CASH';
+
+    // Calculate pending amount from the customer's previous/last order
+    const customerPriorOrders = orders
+      .filter(o => o.customerId === cust.id)
+      .sort((a, b) => b.orderNumber - a.orderNumber);
+    const lastCustomerOrder = customerPriorOrders[0];
+    const prevPendingAmount = orderData.previousOrderPending !== undefined 
+      ? Number(orderData.previousOrderPending) 
+      : (lastCustomerOrder ? (Number(lastCustomerOrder.balanceDue) || 0) : 0);
+    const prevOrderNo = orderData.previousOrderNumber !== undefined
+      ? orderData.previousOrderNumber
+      : (lastCustomerOrder ? lastCustomerOrder.orderNumber : undefined);
 
     const receiptUrl = buildPublicReceiptUrl({
       ...orderData,
@@ -923,6 +1101,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       netAmount: roundedTotal,
       advancePaid: advance,
       balanceDue: balance,
+      previousOrderPending: prevPendingAmount,
+      previousOrderNumber: prevOrderNo,
       adjustmentApplied: appliedAdj > 0 ? appliedAdj : undefined,
       differenceAction: diffAction,
       differenceAmount: (diffAction && diffAmount > 0) ? diffAmount : undefined,
@@ -948,6 +1128,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // 1. Save order to state and select it
     setOrders(prev => [newOrder, ...prev]);
     setActiveOrderId(newOrder.id);
+    setEditingOrderId(null);
+    setEditingOrderData(null);
 
     // 2. Update customer stats
     setCustomers(prev => prev.map(c => {
@@ -1088,7 +1270,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     const newGross = updatedItems.reduce((acc, i) => acc + (i.totalItemPrice * i.quantity), 0);
-    const rawTotal = Math.max(0, newGross - order.discountAmount);
+    const delivery = Number(order.deliveryCharge || 0);
+    const surcharge = Number(order.surchargeAmount || 0);
+    const rawTotal = Math.max(0, newGross + delivery + surcharge - order.discountAmount);
     const roundedNet = Math.round(rawTotal);
     const roundOff = Number((roundedNet - rawTotal).toFixed(2));
     const paidSum = order.payments.reduce((acc, p) => acc + p.amount, 0) + order.advancePaid;
@@ -1137,7 +1321,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const oldDiscount = order.discountAmount;
     const newDiscountAmt = Number(((order.grossAmount * discountPercent) / 100).toFixed(2));
-    const rawTotal = Math.max(0, order.grossAmount - newDiscountAmt);
+    const delivery = Number(order.deliveryCharge || 0);
+    const surcharge = Number(order.surchargeAmount || 0);
+    const rawTotal = Math.max(0, order.grossAmount + delivery + surcharge - newDiscountAmt);
     const roundedNet = Math.round(rawTotal);
     const roundOff = Number((roundedNet - rawTotal).toFixed(2));
     const paidSum = order.payments.reduce((acc, p) => acc + p.amount, 0) + order.advancePaid;
@@ -1403,6 +1589,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       sendWhatsAppNotification('PAYMENT_RECEIVED', orderId);
     }, 300);
 
+    return { success: true };
+  };
+
+  // SUBMIT ORDER UPI REFERENCE (UTR) FOR STORE VERIFICATION
+  const submitOrderUpiRef = (orderId: string, utrNumber: string) => {
+    const cleanUtr = (utrNumber || '').trim();
+    if (!cleanUtr || cleanUtr.length < 4) {
+      showToast('Please enter a valid UPI transaction reference / UTR number.', 'error');
+      return { success: false, error: 'Please enter a valid UPI transaction reference / UTR number.' };
+    }
+
+    setOrders(prev => prev.map(o => {
+      if (o.id === orderId || String(o.orderNumber) === String(orderId)) {
+        return {
+          ...o,
+          submittedUpiRef: cleanUtr,
+          upiRefSubmittedAt: new Date().toISOString()
+        };
+      }
+      return o;
+    }));
+
+    // Audit log
+    const order = orders.find(o => o.id === orderId || String(o.orderNumber) === String(orderId));
+    if (order) {
+      addAuditLog({
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        action: 'ORDER_UPDATED',
+        changedBy: 'Customer (Online Portal)',
+        userRole: 'CUSTOMER' as any,
+        fieldName: 'UPI Payment UTR Reference',
+        previousValue: order.submittedUpiRef || 'None',
+        newValue: cleanUtr,
+        reason: 'Customer submitted UPI payment reference for store bank verification'
+      });
+    }
+
+    fetch(`/api/orders/${encodeURIComponent(orderId)}/submit-upi-ref`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ utrNumber: cleanUtr })
+    }).catch(err => {
+      console.warn('Server UPI ref sync note:', err);
+    });
+
+    showToast(`UPI Reference #${cleanUtr} submitted. Store staff will verify bank credit.`, 'success');
     return { success: true };
   };
 
@@ -1710,7 +1943,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateOrder = (orderId: string, orderData: Partial<Order>) => {
-    const order = orders.find(o => o.id === orderId);
+    const order = orders.find(o => 
+      o.id === orderId || 
+      String(o.orderNumber) === String(orderId) || 
+      o.id === `ord-${orderId}`
+    );
     if (!order) return { success: false, error: 'Order not found' };
 
     const updatedOrder: Order = {
@@ -1720,7 +1957,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updatedBy: `${authUserName} (${authUserRole})`
     };
 
-    setOrders(prev => prev.map(o => o.id === orderId ? updatedOrder : o));
+    setOrders(prev => prev.map(o => (o.id === order.id || o.orderNumber === order.orderNumber) ? updatedOrder : o));
+    setActiveOrderId(updatedOrder.id);
+    setEditingOrderId(null);
+    setEditingOrderData(null);
+
+    if (orderData.balanceDue !== undefined && orderData.balanceDue !== order.balanceDue) {
+      const balanceDiff = Number(orderData.balanceDue) - Number(order.balanceDue);
+      setCustomers(prev => prev.map(c => {
+        if (c.id !== order.customerId) return c;
+        return {
+          ...c,
+          outstandingAmount: Math.max(0, (c.outstandingAmount || 0) + balanceDiff)
+        };
+      }));
+    }
 
     addAuditLog({
       orderId: order.id,
@@ -1846,8 +2097,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setEmailMessages([]);
     setAuditLogs(initialAuditLogs);
     setPriceCorrectionRequests([]);
-    setActiveOrderId('ord-4');
+    setActiveOrderId('');
     showToast('Reset all database records and settings to default factory values.', 'info');
+  };
+
+  const restoreBackupData = (backupData: any) => {
+    if (!backupData || typeof backupData !== 'object') return;
+
+    if (backupData.businessSettings && typeof backupData.businessSettings === 'object') {
+      setBusinessSettings(backupData.businessSettings);
+      localStorage.setItem('cleanera_business_settings', JSON.stringify(backupData.businessSettings));
+    }
+    if (Array.isArray(backupData.orders)) {
+      setOrders(backupData.orders);
+      localStorage.setItem('cleanera_orders', JSON.stringify(backupData.orders));
+      setActiveOrderId('');
+    }
+    if (Array.isArray(backupData.customers)) {
+      setCustomers(backupData.customers);
+      localStorage.setItem('cleanera_customers', JSON.stringify(backupData.customers));
+      if (backupData.customers.length > 0) {
+        setActiveCustomerId(backupData.customers[0].id);
+      }
+    }
+    if (Array.isArray(backupData.users) && backupData.users.length > 0) {
+      setUsers(backupData.users);
+      localStorage.setItem('cleanera_all_users', JSON.stringify(backupData.users));
+    }
+    if (Array.isArray(backupData.crmRecords?.auditLogs)) {
+      setAuditLogs(backupData.crmRecords.auditLogs);
+      localStorage.setItem('cleanera_audit_logs', JSON.stringify(backupData.crmRecords.auditLogs));
+    }
+    if (Array.isArray(backupData.crmRecords?.whatsAppMessages)) {
+      setWhatsAppMessages(backupData.crmRecords.whatsAppMessages);
+      localStorage.setItem('cleanera_wa_messages', JSON.stringify(backupData.crmRecords.whatsAppMessages));
+    }
+    if (Array.isArray(backupData.crmRecords?.priceCorrectionRequests)) {
+      setPriceCorrectionRequests(backupData.crmRecords.priceCorrectionRequests);
+      localStorage.setItem('cleanera_price_requests', JSON.stringify(backupData.crmRecords.priceCorrectionRequests));
+    }
   };
 
   return (
@@ -1879,6 +2167,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       activeCustomerId,
       setActiveCustomerId,
       selectedOrder,
+      editingOrderId,
+      setEditingOrderId,
+      editingOrderData,
+      setEditingOrderData,
+      loadOrderForEditing,
+      cancelEditingOrder,
       createOrder,
       updateOrderPrice,
       updateOrderDiscount,
@@ -1890,6 +2184,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       updateGarmentPressingMethod,
       updateGarmentDetails,
       recordPayment,
+      submitOrderUpiRef,
       completeDelivery,
       recordGarmentReturn,
       resendPaymentLink,
@@ -1900,10 +2195,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       sendManualEmail,
       isWhatsAppSimulatorOpen,
       setWhatsAppSimulatorOpen,
+      setWhatsAppModalOpen: setWhatsAppSimulatorOpen,
       isThermalReceiptModalOpen,
       setThermalReceiptModalOpen,
       isQRTagPreviewModalOpen,
       setQRTagPreviewModalOpen,
+      setGarmentTagPrintModalOpen: setQRTagPreviewModalOpen,
+      catalog: garmentCatalog,
       isCustomerPortalOpen,
       setCustomerPortalOpen,
       isPublicPortalMode,
@@ -1930,7 +2228,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       toastMessage,
       showToast,
       hideToast,
-      resetToDefaults
+      resetToDefaults,
+      restoreBackupData
     }}>
       {children}
     </AppContext.Provider>

@@ -33,6 +33,7 @@ import { PriceCorrectionModal } from './components/workflow/PriceCorrectionModal
 import { QRPickupScanModal } from './components/delivery/QRPickupScanModal';
 import { PublicInvoicePortalPage } from './components/portal/PublicInvoicePortalPage';
 import { findOrderFromReceiptQuery } from './utils/portalUrlUtils';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 
 const MainAppContent: React.FC = () => {
   const { 
@@ -65,14 +66,16 @@ const MainAppContent: React.FC = () => {
   if (isPublicPortalMode) {
     const matchedOrder = findOrderFromReceiptQuery(publicPortalQuery, orders);
     return (
-      <div className="min-h-screen bg-slate-100 flex flex-col font-sans antialiased text-slate-800">
-        <PublicInvoicePortalPage 
-          order={matchedOrder || null}
-          invalidQuery={publicPortalQuery}
-          onExitToCrm={exitPublicPortal} 
-        />
-        <ToastContainer />
-      </div>
+      <ErrorBoundary fallbackTitle="Digital Invoice" fallbackMessage="Could not load digital receipt. Please try reloading the page.">
+        <div className="min-h-screen bg-slate-100 flex flex-col font-sans antialiased text-slate-800">
+          <PublicInvoicePortalPage 
+            order={matchedOrder || null}
+            invalidQuery={publicPortalQuery}
+            onExitToCrm={exitPublicPortal} 
+          />
+          <ToastContainer />
+        </div>
+      </ErrorBoundary>
     );
   }
 

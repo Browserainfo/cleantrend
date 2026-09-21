@@ -11,7 +11,8 @@ import {
 import { pdfGarmentCatalog } from './pdfPriceList';
 
 export const initialBusinessSettings: BusinessSettings = {
-  businessName: 'Trendera Dry Cleaning CRM',
+  storeName: 'Trendera',
+  businessName: 'Trendera Dry Cleaning',
   displayName: 'Trendera Dry Cleaning - Noida',
   legalName: 'Trendera Services Private Limited',
   branchName: 'C2 Sector 1 Noida',
@@ -28,7 +29,7 @@ export const initialBusinessSettings: BusinessSettings = {
   logoUrl: 'https://images.unsplash.com/photo-1545173168-9f1947eebb7f?w=160&auto=format&fit=crop&q=80',
   faviconUrl: 'https://images.unsplash.com/photo-1545173168-9f1947eebb7f?w=48&auto=format&fit=crop&q=80',
   marketingMessage: 'Your space for marketing or any other message.',
-  receiptFooterMessage: 'Thank You for choosing Trendera Dry Cleaning CRM. All garments are carefully inspected before processing. We are not responsible for any article left uncollected after 15 days from the due date. We are not responsible for any damage that may occur during the cleaning process.',
+  receiptFooterMessage: 'Thank You for choosing Trendera Dry Cleaning. All garments are carefully inspected before processing. We are not responsible for any article left uncollected after 15 days from the due date. We are not responsible for any damage that may occur during the cleaning process.',
   customerPortalMessage: 'Welcome to your self-service payment and tracking portal. Fast, secure, and hassle-free.',
   termsAndConditions: '1. Garments must be collected within 15 days of ready date.\n2. In case of damage, maximum liability is 5x of dry cleaning charge.\n3. Colors without color-fastness guarantee processed at customer risk.',
   thankYouMessage: 'We appreciate your business! Visit us again soon.',
@@ -42,7 +43,7 @@ export const initialBusinessSettings: BusinessSettings = {
   paymentQrUrl: '/payment-qr.jpg',
   upiId: '9041590866@hdfc',
   upiPayeeName: 'PRITPAL SINGH',
-  includeQrInWhatsApp: true
+  includeQrInWhatsApp: false
 };
 
 export const serviceDefinitions: ServiceDefinition[] = [
@@ -647,11 +648,8 @@ export const initialWhatsAppMessages: WhatsAppMessage[] = [
     toName: 'Manan Agrawal',
     toPhone: '7060227124',
     triggerType: 'ORDER_CREATED',
-    messageText: `Trendera\n\nHi Manan, Your order #2 is registered.\nAmt: Rs. 968\nQty: 4 Pcs\nDue Date: 24 Nov 2025\nReceipt: https://cleanera.app/portal/invoice?Reciept=TE02-2-968-Cust62-179\n\nWe will inform you in case the order is updated after in-store inspection.\n\nThanks,\nTeam Trendera\n\nNote: Please save our number to activate the Receipt link.\n\n💳 Payment\n\nPlease scan the QR code below to make your payment.\nPayment QR: https://cleanera.app/payment-qr.jpg\nUPI ID: 9041590866@hdfc (PRITPAL SINGH)\n\nThank you for choosing Trendera.`,
+    messageText: `Trendera\n\nHi Manan, Your order #2 is registered.\nAmt: Rs. 968\nQty: 4 Pcs\nDue Date: 24 Nov 2025\nReceipt: https://cleanera.app/portal/invoice?Reciept=TE02-2-968-Cust62-179\n\nWe will inform you in case the order is updated after in-store inspection.\n\nThanks,\nTeam Trendera\n\nNote: Please save our number to activate the Receipt link.`,
     receiptUrl: 'https://cleanera.app/portal/invoice?Reciept=TE02-2-968-Cust62-179',
-    mediaUrl: '/payment-qr.jpg',
-    mediaType: 'IMAGE',
-    qrImageUrl: '/payment-qr.jpg',
     orderNumber: 2,
     timestamp: '14:30',
     status: 'READ',
@@ -674,11 +672,8 @@ export const initialWhatsAppMessages: WhatsAppMessage[] = [
     toName: 'Manan Agrawal',
     toPhone: '7060227124',
     triggerType: 'ORDER_CREATED',
-    messageText: `Trendera\n\nHi Manan, Your order #4 is registered.\nAmt: Rs. 1074\nQty: 4 Pcs\nDue Date: 24 Nov 2025\nReceipt: https://cleanera.app/portal/invoice?Reciept=TE02-4-1074-Cust62-183\n\nWe will inform you in case the order is updated after in-store inspection.\n\nThanks,\nTeam Trendera\n\nNote: Please save our number to activate the Receipt link.\n\n💳 Payment\n\nPlease scan the QR code below to make your payment.\nPayment QR: https://cleanera.app/payment-qr.jpg\nUPI ID: 9041590866@hdfc (PRITPAL SINGH)\n\nThank you for choosing Trendera.`,
+    messageText: `Trendera\n\nHi Manan, Your order #4 is registered.\nAmt: Rs. 1074\nQty: 4 Pcs\nDue Date: 24 Nov 2025\nReceipt: https://cleanera.app/portal/invoice?Reciept=TE02-4-1074-Cust62-183\n\nWe will inform you in case the order is updated after in-store inspection.\n\nThanks,\nTeam Trendera\n\nNote: Please save our number to activate the Receipt link.`,
     receiptUrl: 'https://cleanera.app/portal/invoice?Reciept=TE02-4-1074-Cust62-183',
-    mediaUrl: '/payment-qr.jpg',
-    mediaType: 'IMAGE',
-    qrImageUrl: '/payment-qr.jpg',
     orderNumber: 4,
     timestamp: '14:57',
     status: 'READ',

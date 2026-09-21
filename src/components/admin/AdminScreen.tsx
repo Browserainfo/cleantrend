@@ -17,16 +17,19 @@ import {
   Clock,
   Phone,
   Mail,
-  UserPlus
+  UserPlus,
+  Database
 } from 'lucide-react';
 import { UserRole, User } from '../../types';
 import { deriveEffectiveBranchCode } from '../../utils/pieceTagUtils';
 import { UserManagementScreen } from './UserManagementScreen';
+import { AdminBackupSection } from './AdminBackupSection';
 
 export const AdminScreen: React.FC = () => {
   const { 
     currentUser, 
     currentRole, 
+    activeView,
     setActiveView,
     users, 
     businessSettings, 
@@ -61,9 +64,19 @@ export const AdminScreen: React.FC = () => {
     );
   }
 
-  const [activeAdminTab, setActiveAdminTab] = useState<'USERS' | 'SETTINGS' | 'PRICE_APPROVALS' | 'AUDIT'>('USERS');
+  const [activeAdminTab, setActiveAdminTab] = useState<'USERS' | 'SETTINGS' | 'BACKUPS' | 'PRICE_APPROVALS' | 'AUDIT'>(
+    activeView === 'SETTINGS' ? 'SETTINGS' : 'USERS'
+  );
+
+  // Switch to Settings tab automatically if navigated with SETTINGS view
+  useEffect(() => {
+    if (activeView === 'SETTINGS') {
+      setActiveAdminTab('SETTINGS');
+    }
+  }, [activeView]);
 
   // Business settings state - Single Source of Truth
+  const [storeName, setStoreName] = useState(businessSettings.storeName || 'Trendera');
   const [businessName, setBusinessName] = useState(businessSettings.businessName);
   const [branchName, setBranchName] = useState(businessSettings.branchName);
   const [branchCode, setBranchCode] = useState(businessSettings.branchCode);
@@ -79,6 +92,7 @@ export const AdminScreen: React.FC = () => {
 
   // Sync state whenever businessSettings changes from anywhere in the app
   useEffect(() => {
+    setStoreName(businessSettings.storeName || 'Trendera');
     setBusinessName(businessSettings.businessName);
     setBranchName(businessSettings.branchName);
     setBranchCode(businessSettings.branchCode);
@@ -138,6 +152,7 @@ export const AdminScreen: React.FC = () => {
     }
 
     updateBusinessSettings({
+      storeName: storeName.trim() || 'Trendera',
       businessName: trimmedName,
       displayName: trimmedName,
       legalName: trimmedName,
@@ -219,6 +234,18 @@ export const AdminScreen: React.FC = () => {
             >
               <Settings className="w-3.5 h-3.5" />
               <span>Business Settings & Branding</span>
+            </button>
+
+            <button
+              onClick={() => setActiveAdminTab('BACKUPS')}
+              className={`px-3.5 py-1.5 rounded-md transition flex items-center gap-1.5 ${
+                activeAdminTab === 'BACKUPS'
+                  ? 'bg-emerald-700 text-white shadow-2xs'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              <Database className="w-3.5 h-3.5" />
+              <span>Backups & Restore</span>
             </button>
 
             <button
@@ -310,14 +337,28 @@ export const AdminScreen: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-1">
-                  <label className="font-bold text-slate-700">Branch / Store Name</label>
+                  <label className="font-bold text-slate-700 flex items-center justify-between">
+                    <span>Store Name (WhatsApp) *</span>
+                    <span className="text-[10px] text-emerald-600 font-semibold">Header & Sign-off</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={storeName}
+                    onChange={(e) => setStoreName(e.target.value)}
+                    placeholder="e.g. Trendera"
+                    className="w-full p-2 border border-slate-300 rounded font-bold text-slate-900 outline-none focus:ring-1 focus:ring-sky-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700">Branch / Location Name</label>
                   <input
                     type="text"
                     value={branchName}
                     onChange={(e) => setBranchName(e.target.value)}
-                    placeholder="e.g. Main Branch"
+                    placeholder="e.g. C2 Sector 1 Noida"
                     className="w-full p-2 border border-slate-300 rounded text-slate-900 outline-none focus:ring-1 focus:ring-sky-500"
                   />
                 </div>
@@ -424,7 +465,7 @@ export const AdminScreen: React.FC = () => {
               <div className="pt-2 flex justify-end">
                 <button
                   type="submit"
-                  className="px-6 py-2.5 bg-sky-600 hover:bg-sky-500 text-white font-bold rounded flex items-center gap-2 shadow-xs transition"
+                  className="px-6 py-2.5 bg-sky-600 hover:bg-sky-500 text-white font-bold rounded flex items-center gap-2 shadow-xs transition cursor-pointer"
                 >
                   <Save className="w-4 h-4" />
                   <span>Save Business Configuration</span>
@@ -434,7 +475,12 @@ export const AdminScreen: React.FC = () => {
           </div>
         )}
 
-        {/* Tab 3: Price Exception Approvals */}
+        {/* Tab 3: Backups & Disaster Recovery */}
+        {activeAdminTab === 'BACKUPS' && (
+          <AdminBackupSection />
+        )}
+
+        {/* Tab 4: Price Exception Approvals */}
         {activeAdminTab === 'PRICE_APPROVALS' && (
           <div className="flex-1 bg-white rounded-lg border border-slate-200 shadow-xs flex flex-col overflow-hidden">
             <div className="p-3.5 border-b border-slate-200 bg-slate-50 flex items-center justify-between">

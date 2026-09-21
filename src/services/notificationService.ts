@@ -49,14 +49,57 @@ export function resolveAbsoluteQrUrl(qrUrl?: string, settings?: BusinessSettings
 }
 
 /**
- * Builds the exact dynamic WhatsApp order confirmation message in Cleanera's short format,
- * with payment instructions and QR scanner appended when configured.
+ * Resolves the dynamic Store Name from Admin Settings for WhatsApp messages and customer communications.
+ * Strictly guarantees that "Cleanera" is never present, and uses the exact Store Name configured in Admin Settings.
+ */
+export function getEffectiveStoreName(settings?: BusinessSettings): string {
+  if (!settings) return 'Trendera';
+
+  const rawCandidate = (
+    settings.storeName?.trim() ||
+    settings.businessName?.trim() ||
+    settings.displayName?.trim() ||
+    'Trendera'
+  );
+
+  // Remove "Cleanera" completely from the store name
+  let cleaned = rawCandidate.replace(/Cleanera/gi, '').trim();
+
+  // If starts with or equals Trendera (case-insensitive), normalize to 'Trendera'
+  if (/^trendera\b/i.test(cleaned)) {
+    return 'Trendera';
+  }
+
+  // If candidate had generic CRM or legal suffixes appended (e.g. "Acme Dry Cleaning CRM"), clean it up
+  cleaned = cleaned.replace(/\s*(?:Dry\s+Cleaning|CRM|Services|Pvt|Ltd|Private|Limited).*$/i, '').trim();
+
+  return cleaned || 'Trendera';
+}
+
+/**
+ * Builds the exact dynamic WhatsApp order confirmation message.
+ * Adheres strictly to the user-specified format:
+ *
+ * <StoreName>
+ *
+ * Hi <Customer>, Your order #<Number> is registered.
+ * Amt: Rs. <Amount>
+ * Qty: <Quantity> Pcs
+ * Due Date: <DD Mon YYYY>
+ * Receipt: <ReceiptURL>
+ *
+ * We will inform you in case the order is updated after in-store inspection.
+ *
+ * Thanks,
+ * Team <StoreName>
+ *
+ * Note: Please save our number to activate the Receipt link.
  */
 export function buildOrderWhatsAppMessage(
   order: Order,
   customer: Customer,
   businessSettings: BusinessSettings,
-  customQrUrl?: string
+  _customQrUrl?: string
 ): string {
   const custName = (customer?.name || order.customerName || '').trim();
   const orderNumber = order.orderNumber;
@@ -65,16 +108,14 @@ export function buildOrderWhatsAppMessage(
   const formattedDueDate = formatWhatsAppDueDate(order.dueDate);
   const receiptUrl = order.receiptUrl || buildPublicReceiptUrl(order, businessSettings);
 
-  const brandName = (businessSettings?.businessName || '').split(/[\s\-_]+/)[0] 
-    || (businessSettings?.displayName || '').split(/[\s\-_]+/)[0] 
-    || 'Trendera';
+  const storeName = getEffectiveStoreName(businessSettings);
 
   const greeting = custName && custName !== 'Customer' && custName !== 'Walk-in'
     ? `Hi ${custName}, Your order #${orderNumber} is registered.`
     : `Hi, Your order #${orderNumber} is registered.`;
 
   const lines = [
-    brandName,
+    storeName,
     '',
     greeting,
     `Amt: Rs. ${totalAmount}`,
@@ -85,45 +126,10 @@ export function buildOrderWhatsAppMessage(
     `We will inform you in case the order is updated after in-store inspection.`,
     '',
     `Thanks,`,
-    `Team ${brandName}`,
+    `Team ${storeName}`,
     '',
     `Note: Please save our number to activate the Receipt link.`
   ];
-
-  // Append payment QR scanner section if configured and enabled
-  const hasQrConfigured = Boolean(
-    businessSettings?.paymentQrUrl?.trim() || businessSettings?.upiId?.trim()
-  );
-  const shouldIncludeQr = businessSettings?.includeQrInWhatsApp !== false && hasQrConfigured;
-
-  if (shouldIncludeQr) {
-    const rawAmt = order.balanceDue > 0 ? order.balanceDue : (order.netAmount || 0);
-    const defaultQrUrl = resolveAbsoluteQrUrl(
-      `/api/payment-qr?orderId=${order.id}&amount=${rawAmt.toFixed(2)}&orderNumber=${order.orderNumber}`,
-      businessSettings
-    );
-    const resolvedQrUrl = customQrUrl || defaultQrUrl;
-    lines.push(
-      '',
-      '💳 Payment',
-      '',
-      'Please scan the QR code below to make your payment.'
-    );
-
-    if (resolvedQrUrl && !resolvedQrUrl.startsWith('data:')) {
-      lines.push(`Payment QR: ${resolvedQrUrl}`);
-    }
-
-    if (businessSettings.upiId) {
-      const payee = businessSettings.upiPayeeName ? ` (${businessSettings.upiPayeeName})` : '';
-      lines.push(`UPI ID: ${businessSettings.upiId}${payee}`);
-    }
-
-    lines.push(
-      '',
-      `Thank you for choosing ${brandName}.`
-    );
-  }
 
   return lines.join('\n');
 }
@@ -358,28 +364,6 @@ export async function dispatchOrderNotifications(
   try {
     const rawPhone = (customer.mobile || order.customerMobile || '').trim();
     const normalizedPhone = normalizeIndianPhoneNumber(rawPhone);
-    const hasQrConfigured = Boolean(
-      businessSettings?.paymentQrUrl?.trim() || businessSettings?.upiId?.trim()
-    );
-    const shouldIncludeQr = businessSettings?.includeQrInWhatsApp !== false && hasQrConfigured;
-
-    let resolvedQr: string | undefined = undefined;
-    let absoluteQr: string | undefined = undefined;
-
-    if (shouldIncludeQr) {
-      try {
-        const upiResult = await generateOrderUpiQr(order, businessSettings);
-        resolvedQr = upiResult.qrDataUrl;
-        absoluteQr = resolveAbsoluteQrUrl(
-          `/api/payment-qr?orderId=${order.id}&amount=${upiResult.amount}&orderNumber=${order.orderNumber}`,
-          businessSettings
-        );
-      } catch (qrErr) {
-        console.error('[NotificationService] Error generating dynamic UPI QR:', qrErr);
-        resolvedQr = businessSettings.paymentQrUrl || '/payment-qr.jpg';
-        absoluteQr = resolveAbsoluteQrUrl(resolvedQr, businessSettings);
-      }
-    }
 
     // Validate phone number has digits
     const digitsOnly = normalizedPhone.replace(/\D/g, '');
@@ -392,11 +376,8 @@ export async function dispatchOrderNotifications(
           toName: customer.name || order.customerName,
           toPhone: rawPhone,
           triggerType: 'ORDER_CREATED',
-          messageText: buildOrderWhatsAppMessage(order, customer, businessSettings, absoluteQr),
+          messageText: buildOrderWhatsAppMessage(order, customer, businessSettings),
           receiptUrl: order.receiptUrl,
-          mediaUrl: resolvedQr,
-          mediaType: resolvedQr ? 'IMAGE' : undefined,
-          qrImageUrl: absoluteQr || resolvedQr,
           orderNumber: order.orderNumber,
           timestamp: timeStr,
           status: 'FAILED',
@@ -405,7 +386,7 @@ export async function dispatchOrderNotifications(
         }
       };
     } else {
-      const messageText = buildOrderWhatsAppMessage(order, customer, businessSettings, absoluteQr);
+      const messageText = buildOrderWhatsAppMessage(order, customer, businessSettings);
       const waMsg: WhatsAppMessage = {
         id: `wa-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
         toName: customer.name || order.customerName,
@@ -413,9 +394,6 @@ export async function dispatchOrderNotifications(
         triggerType: 'ORDER_CREATED',
         messageText,
         receiptUrl: order.receiptUrl,
-        mediaUrl: resolvedQr,
-        mediaType: resolvedQr ? 'IMAGE' : undefined,
-        qrImageUrl: absoluteQr || resolvedQr,
         orderNumber: order.orderNumber,
         timestamp: timeStr,
         status: 'SENT',

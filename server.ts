@@ -7,7 +7,35 @@ import bcrypt from 'bcryptjs';
 import QRCode from 'qrcode';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 import { createServer as createViteServer } from 'vite';
-import { initialOrders, initialCustomers, initialBusinessSettings } from './src/data/initialData';
+import { GoogleGenAI, Type } from '@google/genai';
+// @ts-ignore
+import * as pdfParseMod from 'pdf-parse';
+const PDFParse = (pdfParseMod as any).PDFParse || (pdfParseMod as any).default || pdfParseMod;
+
+let geminiClient: GoogleGenAI | null = null;
+function getGeminiClient(): GoogleGenAI | null {
+  if (!process.env.GEMINI_API_KEY) return null;
+  if (!geminiClient) {
+    geminiClient = new GoogleGenAI({
+      apiKey: process.env.GEMINI_API_KEY,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build'
+        }
+      }
+    });
+  }
+  return geminiClient;
+}
+import { 
+  initialOrders, 
+  initialCustomers, 
+  initialBusinessSettings,
+  serviceDefinitions,
+  garmentCatalog,
+  initialAuditLogs,
+  initialWhatsAppMessages
+} from './src/data/initialData';
 
 const app = express();
 const PORT = 3000;
@@ -379,6 +407,9 @@ app.get('/api/invoice/:ref', (req, res) => {
       logoUrl: db.settings.logoUrl,
       receiptFooterMessage: db.settings.receiptFooterMessage,
       onlinePortalDomain: db.settings.onlinePortalDomain,
+      upiId: db.settings.upiId || '9041590866@hdfc',
+      upiPayeeName: db.settings.upiPayeeName || 'PRITPAL SINGH',
+      paymentQrUrl: db.settings.paymentQrUrl || '/payment-qr.jpg'
     }
   });
 });
@@ -406,11 +437,40 @@ app.get('/api/invoice', (req, res) => {
       logoUrl: db.settings.logoUrl,
       receiptFooterMessage: db.settings.receiptFooterMessage,
       onlinePortalDomain: db.settings.onlinePortalDomain,
+      upiId: db.settings.upiId || '9041590866@hdfc',
+      upiPayeeName: db.settings.upiPayeeName || 'PRITPAL SINGH',
+      paymentQrUrl: db.settings.paymentQrUrl || '/payment-qr.jpg'
     }
   });
 });
 
-// Record public self-service invoice payment on an order
+// Submit customer UPI payment reference (UTR) for store verification
+app.post('/api/orders/:id/submit-upi-ref', (req, res) => {
+  const orderId = req.params.id;
+  const { utrNumber, amount } = req.body;
+  const order = db.orders.find(o => o.id === orderId || String(o.orderNumber) === String(orderId));
+  if (!order) {
+    return res.status(404).json({ success: false, error: 'Order not found' });
+  }
+
+  if (!utrNumber || String(utrNumber).trim().length < 4) {
+    return res.status(400).json({ success: false, error: 'Please enter a valid UPI transaction reference / UTR number.' });
+  }
+
+  const cleanUtr = String(utrNumber).trim();
+  order.submittedUpiRef = cleanUtr;
+  order.upiRefSubmittedAt = new Date().toISOString();
+  order.upiRefAmount = typeof amount === 'number' ? amount : order.balanceDue;
+
+  saveDatabase();
+  return res.json({ 
+    success: true, 
+    order, 
+    message: `UPI Reference ${cleanUtr} submitted successfully for verification.` 
+  });
+});
+
+// Record public self-service invoice payment on an order (Staff / Verified callback only)
 app.post('/api/orders/:id/pay', (req, res) => {
   const orderId = req.params.id;
   const { amount, paymentMethod } = req.body;
@@ -1008,17 +1068,1282 @@ app.post('/api/customers', requireAuth, (req, res) => {
 });
 
 // -------------------------------------------------------------
+// PDF GARMENT PRICE-LIST EXTRACTION API (GEMINI + NATIVE PARSER)
+// -------------------------------------------------------------
+
+function parsePriceListContent(rawText: string) {
+  const items: any[] = [];
+  const knownServices = [
+    'Dry Clean', 'Dry Cleaning', 'Steam Iron', 'Steam Press', 
+    'Starching DC', 'Starching', 'Shoe Cleaning', 'Laundry', 
+    'Wash & Fold', 'Wash & Iron', 'Alteration', 'Leather Care', 'Mending',
+    'Hanger Add-on'
+  ];
+  const knownCategories = [
+    'MEN', 'WOMEN', 'KIDS', 'HOUSEHOLD', 'SHOES', 'OTHERS', 
+    'INSTITUTIONAL', 'COMMON', 'ECO_WASH', 'SPECIAL',
+    'GENTS', 'LADIES', 'CHILDREN', 'HOME', 'LINEN'
+  ];
+
+  // Insert newline before each known service if crammed
+  const sPattern = knownServices.map(s => s.replace(/\s+/g, '\\s+')).join('|');
+  const normalized = rawText.replace(new RegExp('([0-9]|\\/|-)(' + sPattern + ')', 'gi'), '$1\n$2');
+
+  const lines = normalized.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+
+  let currentService = 'Dry Clean';
+  let currentCategory = 'MEN';
+
+  for (const line of lines) {
+    if (/official master price|price catalog|page \d|---|===/i.test(line)) continue;
+    if (/^service\s+category\s+garment/i.test(line)) continue;
+
+    let workLine = line;
+
+    // Check if line starts with or contains a service
+    for (const s of knownServices) {
+      const sReg = new RegExp('^' + s.replace(/\s+/g, '\\s+') + '\\b', 'i');
+      if (sReg.test(workLine)) {
+        currentService = s;
+        workLine = workLine.replace(sReg, '').trim();
+        break;
+      }
+    }
+
+    // Check if line starts with or contains a category
+    const catReg = new RegExp('^(' + knownCategories.join('|') + ')\\b', 'i');
+    const catMatch = workLine.match(catReg);
+    if (catMatch) {
+      currentCategory = catMatch[1].toUpperCase();
+      workLine = workLine.replace(catReg, '').trim();
+    }
+
+    // Normalize category
+    let catNormalized = currentCategory;
+    if (catNormalized === 'GENTS') catNormalized = 'MEN';
+    if (catNormalized === 'LADIES') catNormalized = 'WOMEN';
+    if (catNormalized === 'CHILDREN') catNormalized = 'KIDS';
+    if (catNormalized === 'HOME' || catNormalized === 'LINEN') catNormalized = 'HOUSEHOLD';
+
+    // Extract price from the end
+    const priceMatch = workLine.match(/(?:₹|rs\.?|inr)?\s*([0-9]+(?:\.[0-9]{1,2})?)\s*(?:\/-)?$/i);
+    if (!priceMatch) continue;
+
+    const price = parseFloat(priceMatch[1]);
+    const nameAndCode = workLine.slice(0, priceMatch.index).trim();
+    if (!nameAndCode) continue;
+
+    // Extract item code
+    const tokens = nameAndCode.split(/\s+/);
+    let itemCode = '';
+    let garmentItem = nameAndCode;
+
+    if (tokens.length > 1) {
+      const lastToken = tokens[tokens.length - 1];
+      if (/^[A-Z0-9-]{1,8}$/i.test(lastToken) && !/^(AND|THE|WITH|FOR|OF|IN)$/i.test(lastToken)) {
+        itemCode = lastToken.toUpperCase();
+        garmentItem = tokens.slice(0, tokens.length - 1).join(' ');
+      }
+    }
+
+    if (!itemCode) {
+      itemCode = garmentItem.split(/\s+/).map(w => w[0]).join('').slice(0, 4).toUpperCase();
+    }
+
+    // Normalize service name
+    let srvNormalized = currentService;
+    if (srvNormalized.toLowerCase() === 'dry cleaning') srvNormalized = 'Dry Clean';
+    if (srvNormalized.toLowerCase() === 'steam press') srvNormalized = 'Steam Iron';
+
+    items.push({
+      service: srvNormalized,
+      category: catNormalized,
+      garmentItem: garmentItem.trim(),
+      itemCode: itemCode.trim(),
+      price: price
+    });
+  }
+
+  return items;
+}
+
+// POST /api/extract-price-list-pdf
+app.post('/api/extract-price-list-pdf', async (req, res) => {
+  try {
+    const { pdfBase64, fileName } = req.body;
+    if (!pdfBase64) {
+      return res.status(400).json({ success: false, error: 'No PDF data received. Please upload a valid PDF.' });
+    }
+
+    // Clean base64 string
+    const cleanBase64 = pdfBase64.replace(/^data:application\/pdf;base64,/, '').trim();
+    const pdfBuffer = Buffer.from(cleanBase64, 'base64');
+
+    // 1. Native text extraction using PDFParse
+    let rawText = '';
+    let numPages = 1;
+    try {
+      const parserInstance = new PDFParse({ data: pdfBuffer });
+      await parserInstance.load();
+      const parseResult = await parserInstance.getText();
+      rawText = parseResult.text || '';
+      numPages = parseResult.total || 1;
+      await parserInstance.destroy();
+    } catch (pdfErr) {
+      console.warn('[PDF Extract] PDFParse notice:', pdfErr);
+    }
+
+    let extractedItems: any[] = [];
+    let method: 'gemini' | 'heuristic' = 'heuristic';
+
+    // 2. Try Gemini 3.8 Flash if GEMINI_API_KEY is configured
+    if (process.env.GEMINI_API_KEY) {
+      try {
+        const ai = getGeminiClient();
+        if (ai) {
+          const prompt = `You are an expert dry cleaning and laundry master price catalog data extractor.
+Analyze the following text from a price list PDF document and extract every single garment item into a structured JSON array.
+Each item MUST have:
+- service: Standard laundry/dry cleaning service name. Must be one of: 'Dry Clean', 'Steam Iron', 'Laundry', 'Starching', 'Starching DC', 'Shoe Cleaning', 'Alteration', 'Leather Care', 'Mending', or 'Hanger Add-on'.
+- category: Target category. Must be one of: 'MEN', 'WOMEN', 'KIDS', 'HOUSEHOLD', 'SHOES', 'OTHERS', 'INSTITUTIONAL', 'COMMON', 'ECO_WASH', 'SPECIAL' (normalize e.g. Gents -> MEN, Ladies -> WOMEN, Linen/Home -> HOUSEHOLD).
+- garmentItem: Full name of the garment (e.g. Achkan, Coat, Sherwani, Kurta, Saree Silk, Lehenga Choli, Bedsheet Double, etc.).
+- itemCode: Short alphanumeric code (e.g. AC, ACH, KP, SH, etc.). If missing or not present, generate an intuitive 2-4 letter uppercase code from the garment name.
+- price: Numeric price/rate in INR (e.g. 298.00).
+
+PRICE LIST CONTENT:
+${rawText ? rawText.slice(0, 40000) : 'Document content'}`;
+
+          const parts: any[] = [];
+          if (cleanBase64.length < 8000000) {
+            parts.push({
+              inlineData: {
+                mimeType: 'application/pdf',
+                data: cleanBase64
+              }
+            });
+          }
+          parts.push({ text: prompt });
+
+          const aiResponse = await ai.models.generateContent({
+            model: 'gemini-3.8-flash',
+            contents: { parts },
+            config: {
+              responseMimeType: 'application/json',
+              responseSchema: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    service: { type: Type.STRING },
+                    category: { type: Type.STRING },
+                    garmentItem: { type: Type.STRING },
+                    itemCode: { type: Type.STRING },
+                    price: { type: Type.NUMBER }
+                  },
+                  required: ['service', 'category', 'garmentItem', 'itemCode', 'price']
+                }
+              }
+            }
+          });
+
+          if (aiResponse.text) {
+            const parsed = JSON.parse(aiResponse.text);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              extractedItems = parsed;
+              method = 'gemini';
+            }
+          }
+        }
+      } catch (geminiErr) {
+        console.warn('[PDF Extract] Gemini fallback to heuristic:', geminiErr);
+      }
+    }
+
+    // 3. Fallback to rule-based parser if Gemini not available or returned no items
+    if (extractedItems.length === 0 && rawText) {
+      extractedItems = parsePriceListContent(rawText);
+      method = 'heuristic';
+    }
+
+    return res.json({
+      success: true,
+      items: extractedItems,
+      totalExtracted: extractedItems.length,
+      numPages,
+      method,
+      fileName: fileName || 'catalog.pdf'
+    });
+  } catch (err: any) {
+    console.error('[PDF Extract API Error]:', err);
+    return res.status(500).json({ success: false, error: err?.message || 'Failed to extract PDF price list.' });
+  }
+});
+
+// GET /api/sample-price-list-pdf
+app.get('/api/sample-price-list-pdf', (req, res) => {
+  const samplePath = path.join(process.cwd(), 'public', 'sample-price-list.pdf');
+  if (fs.existsSync(samplePath)) {
+    res.download(samplePath, 'Trendera-Master-Price-Catalog-2026.pdf');
+  } else {
+    res.status(404).json({ success: false, error: 'Sample PDF not found.' });
+  }
+});
+
+// -------------------------------------------------------------
+// AUTOMATIC WEEKLY THURSDAY & DAILY BACKUP SYSTEM
+// Target on Windows PC: C:\Cleanera Backups\ (Outside project folder)
+// Retains all previous weekly backups without overwriting
+// -------------------------------------------------------------
+const BACKUPS_DIR = path.join(process.cwd(), 'backups');
+const WINDOWS_BACKUPS_DIR = 'C:\\Cleanera Backups';
+
+if (!fs.existsSync(BACKUPS_DIR)) {
+  try {
+    fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+  } catch (err) {
+    console.error('[Cleanera Backup] Failed to create backups folder:', err);
+  }
+}
+
+// Attempt creation of the external Windows PC backup directory
+try {
+  if (!fs.existsSync(WINDOWS_BACKUPS_DIR)) {
+    fs.mkdirSync(WINDOWS_BACKUPS_DIR, { recursive: true });
+  }
+} catch (e) {}
+
+interface BackupMeta {
+  lastAttempt: string;
+  formattedDate: string;
+  lastStatus: 'SUCCESS' | 'FAILED';
+  lastFilename: string | null;
+  sizeBytes: number;
+  triggerType: string;
+  error: string | null;
+  summary?: any;
+  windowsPath?: string;
+  windowsSaved?: boolean;
+}
+
+function isBackupFile(filename: string): boolean {
+  if (!filename.endsWith('.json')) return false;
+  if (filename === 'last_backup_meta.json') return false;
+  const lower = filename.toLowerCase();
+  return lower.startsWith('cleanera_backup_') || lower.startsWith('trendera_backup_');
+}
+
+function generateBackupFilename(date: Date, triggerType: string = 'WEEKLY_THURSDAY'): { filename: string; fullPath: string } {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1);
+  const day = pad(date.getDate());
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+
+  // Requirement: Cleanera_Backup_YYYY-MM-DD.json
+  const baseFilename = `Cleanera_Backup_${year}-${month}-${day}.json`;
+  let filename = baseFilename;
+  let fullPath = path.join(BACKUPS_DIR, filename);
+
+  // Requirement: Keep multiple previous weekly/daily backups without overwriting
+  if (fs.existsSync(fullPath)) {
+    filename = `Cleanera_Backup_${year}-${month}-${day}_${hours}-${minutes}.json`;
+    fullPath = path.join(BACKUPS_DIR, filename);
+    let counter = 1;
+    while (fs.existsSync(fullPath)) {
+      filename = `Cleanera_Backup_${year}-${month}-${day}_${hours}-${minutes}_${counter}.json`;
+      fullPath = path.join(BACKUPS_DIR, filename);
+      counter++;
+    }
+  }
+
+  return { filename, fullPath };
+}
+
+// Save copy outside the CRM project folder on the Windows PC: C:\Cleanera Backups\
+function saveCopyToWindowsPC(filename: string, jsonContent: string): { success: boolean; path: string; error?: string } {
+  const targetDir = WINDOWS_BACKUPS_DIR;
+  try {
+    if (!fs.existsSync(targetDir)) {
+      try {
+        fs.mkdirSync(targetDir, { recursive: true });
+      } catch (e) {}
+    }
+
+    if (fs.existsSync(targetDir)) {
+      let winFullPath = path.join(targetDir, filename);
+      // Guarantee: keep previous weekly backups without overwriting
+      if (fs.existsSync(winFullPath)) {
+        const parsed = path.parse(filename);
+        let counter = 1;
+        while (fs.existsSync(path.join(targetDir, `${parsed.name}_${counter}${parsed.ext}`))) {
+          counter++;
+        }
+        winFullPath = path.join(targetDir, `${parsed.name}_${counter}${parsed.ext}`);
+      }
+      fs.writeFileSync(winFullPath, jsonContent, 'utf-8');
+      console.log(`[Cleanera Backup] External Windows copy saved successfully outside CRM project folder: ${winFullPath}`);
+      return { success: true, path: winFullPath };
+    }
+  } catch (err: any) {
+    console.warn(`[Cleanera Backup] Note: Direct write to ${targetDir} on this host platform returned: ${err.message}`);
+  }
+
+  // Cross-platform external fallback mirror outside CRM project folder
+  try {
+    const mirrorDir = path.resolve(process.cwd(), '..', 'Cleanera Backups');
+    if (!fs.existsSync(mirrorDir)) {
+      fs.mkdirSync(mirrorDir, { recursive: true });
+    }
+    let mirrorPath = path.join(mirrorDir, filename);
+    if (fs.existsSync(mirrorPath)) {
+      const parsed = path.parse(filename);
+      let counter = 1;
+      while (fs.existsSync(path.join(mirrorDir, `${parsed.name}_${counter}${parsed.ext}`))) {
+        counter++;
+      }
+      mirrorPath = path.join(mirrorDir, `${parsed.name}_${counter}${parsed.ext}`);
+    }
+    fs.writeFileSync(mirrorPath, jsonContent, 'utf-8');
+    console.log(`[Cleanera Backup] External folder mirror copy saved at: ${mirrorPath}`);
+  } catch (e) {}
+
+  return {
+    success: false,
+    path: `C:\\Cleanera Backups\\${filename}`,
+    error: `Windows PC location C:\\Cleanera Backups\\ configured`
+  };
+}
+
+function performBackup(triggerType: 'WEEKLY_THURSDAY' | 'AUTOMATIC_7PM' | 'MANUAL' | 'INITIAL_BASELINE' = 'WEEKLY_THURSDAY', extraData?: any) {
+  const now = new Date();
+  try {
+    if (!fs.existsSync(BACKUPS_DIR)) {
+      fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+    }
+
+    const { filename, fullPath } = generateBackupFilename(now, triggerType);
+
+    // Extract consolidated payments across all Cleanera orders
+    const paymentsSummary: any[] = [];
+    (db.orders || []).forEach(ord => {
+      if (Array.isArray(ord.payments)) {
+        ord.payments.forEach((p: any) => {
+          paymentsSummary.push({
+            orderId: ord.id,
+            orderNumber: ord.orderNumber,
+            customerName: ord.customerName,
+            customerMobile: ord.customerMobile,
+            amount: p.amount,
+            mode: p.mode,
+            date: p.date,
+            referenceNumber: p.referenceNumber || '',
+            recordedBy: p.recordedBy || ''
+          });
+        });
+      }
+    });
+
+    const backupPayload = {
+      backupMetadata: {
+        system: 'Cleanera Dry Cleaning CRM',
+        version: '2.0.0',
+        triggerType,
+        isWeeklyBackup: triggerType === 'WEEKLY_THURSDAY' || now.getDay() === 4,
+        createdAt: now.toISOString(),
+        formattedDate: now.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
+        filename,
+        storeBranch: db.settings?.branchName || 'C2 Sector 1 Noida',
+        branchCode: db.settings?.branchCode || 'TE02',
+        currency: db.settings?.currencySymbol || 'Rs.',
+        windowsBackupFolder: 'C:\\Cleanera Backups\\',
+        windowsBackupFile: `C:\\Cleanera Backups\\${filename}`,
+        scheduleDetails: 'Every Thursday at 7:00 PM automatically creates complete CRM backup and saves copy to C:\\Cleanera Backups\\ without overwriting'
+      },
+      summary: {
+        totalOrders: db.orders?.length || 0,
+        totalCustomers: db.customers?.length || 0,
+        totalPayments: paymentsSummary.length,
+        totalServices: serviceDefinitions?.length || 0,
+        totalGarments: garmentCatalog?.length || 0,
+        totalUsers: (db.users || []).length,
+        totalAuditLogs: (extraData?.auditLogs || initialAuditLogs || []).length
+      },
+      businessSettings: db.settings || initialBusinessSettings,
+      customers: db.customers || initialCustomers,
+      orders: db.orders || initialOrders,
+      payments: paymentsSummary,
+      masterData: {
+        services: serviceDefinitions,
+        garments: garmentCatalog
+      },
+      users: (db.users || []).map(sanitizeUser),
+      crmRecords: {
+        auditLogs: extraData?.auditLogs || initialAuditLogs || [],
+        whatsAppMessages: extraData?.whatsAppMessages || initialWhatsAppMessages || [],
+        priceCorrectionRequests: extraData?.priceCorrectionRequests || []
+      }
+    };
+
+    const jsonContent = JSON.stringify(backupPayload, null, 2);
+    fs.writeFileSync(fullPath, jsonContent, 'utf-8');
+    const stat = fs.statSync(fullPath);
+
+    // Save copy outside CRM project folder on Windows PC: C:\Cleanera Backups\
+    const winCopy = saveCopyToWindowsPC(filename, jsonContent);
+
+    const meta: BackupMeta = {
+      lastAttempt: now.toISOString(),
+      formattedDate: now.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
+      lastStatus: 'SUCCESS',
+      lastFilename: filename,
+      sizeBytes: stat.size,
+      triggerType,
+      error: null,
+      summary: backupPayload.summary,
+      windowsPath: winCopy.path,
+      windowsSaved: winCopy.success
+    };
+
+    fs.writeFileSync(path.join(BACKUPS_DIR, 'last_backup_meta.json'), JSON.stringify(meta, null, 2), 'utf-8');
+    console.log(`[Cleanera Backup] Successfully created ${triggerType} backup: ${filename} (${stat.size} bytes). Windows path: ${winCopy.path}`);
+    return { success: true, filename, meta, windowsPath: winCopy.path, windowsSaved: winCopy.success };
+  } catch (err: any) {
+    console.error('[Cleanera Backup] Backup failed:', err);
+    const meta: BackupMeta = {
+      lastAttempt: now.toISOString(),
+      formattedDate: now.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
+      lastStatus: 'FAILED',
+      lastFilename: null,
+      sizeBytes: 0,
+      triggerType,
+      error: err.message || 'Failed to write backup to disk'
+    };
+    try {
+      if (!fs.existsSync(BACKUPS_DIR)) fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+      fs.writeFileSync(path.join(BACKUPS_DIR, 'last_backup_meta.json'), JSON.stringify(meta, null, 2), 'utf-8');
+    } catch (e) {}
+    return { success: false, error: meta.error, meta };
+  }
+}
+
+// Compute upcoming Thursday information
+function getNextThursdayInfo(): { nextThursdayDate: string; formattedNextThursday: string; isTodayThursday: boolean } {
+  const now = new Date();
+  const day = now.getDay(); // 0 = Sun, 1 = Mon, ..., 4 = Thu
+  let daysToAdd = (4 - day + 7) % 7;
+  const isTodayThursday = day === 4;
+
+  if (isTodayThursday && now.getHours() >= 19 && now.getMinutes() >= 5) {
+    daysToAdd = 7;
+  }
+
+  const target = new Date(now);
+  target.setDate(now.getDate() + daysToAdd);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const y = target.getFullYear();
+  const m = pad(target.getMonth() + 1);
+  const d = pad(target.getDate());
+  const nextThursdayDate = `${y}-${m}-${d}`;
+  const formattedNextThursday = target.toLocaleDateString('en-IN', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  }) + ' at 7:00 PM';
+
+  return { nextThursdayDate, formattedNextThursday, isTodayThursday };
+}
+
+// Read all backups from the isolated /backups directory and Windows external location
+function getAllBackupsList(): any[] {
+  const seenFilenames = new Set<string>();
+  const list: any[] = [];
+
+  const scanDirectory = (dirPath: string, locationLabel: string) => {
+    if (!fs.existsSync(dirPath)) return;
+    try {
+      const files = fs.readdirSync(dirPath).filter(isBackupFile);
+      for (const filename of files) {
+        if (seenFilenames.has(filename)) continue;
+        seenFilenames.add(filename);
+
+        const fullPath = path.join(dirPath, filename);
+        try {
+          const stat = fs.statSync(fullPath);
+          let triggerType = 'AUTOMATIC';
+          let formattedDate = stat.mtime.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+          let dayOfWeek = stat.mtime.toLocaleDateString('en-IN', { weekday: 'long' });
+          let summary = {
+            totalOrders: db.orders?.length || 0,
+            totalCustomers: db.customers?.length || 0,
+            totalUsers: (db.users || []).length,
+            totalPayments: 0
+          };
+          let branchName = db.settings?.branchName || 'Trendera Cleaners';
+          let isWeekly = false;
+
+          // Inspect JSON payload for rich metadata
+          try {
+            const raw = fs.readFileSync(fullPath, 'utf-8');
+            const parsed = JSON.parse(raw);
+            if (parsed.backupMetadata) {
+              if (parsed.backupMetadata.triggerType) triggerType = parsed.backupMetadata.triggerType;
+              if (parsed.backupMetadata.formattedDate) formattedDate = parsed.backupMetadata.formattedDate;
+              if (parsed.backupMetadata.storeBranch) branchName = parsed.backupMetadata.storeBranch;
+              if (parsed.backupMetadata.createdAt) {
+                const d = new Date(parsed.backupMetadata.createdAt);
+                dayOfWeek = d.toLocaleDateString('en-IN', { weekday: 'long' });
+              }
+              if (parsed.backupMetadata.isWeeklyBackup || triggerType === 'WEEKLY_THURSDAY') {
+                isWeekly = true;
+              }
+            }
+            if (parsed.summary) {
+              summary = parsed.summary;
+            } else {
+              summary = {
+                totalOrders: Array.isArray(parsed.orders) ? parsed.orders.length : 0,
+                totalCustomers: Array.isArray(parsed.customers) ? parsed.customers.length : 0,
+                totalUsers: Array.isArray(parsed.users) ? parsed.users.length : 0,
+                totalPayments: Array.isArray(parsed.payments) ? parsed.payments.length : 0
+              };
+            }
+          } catch (e) {}
+
+          if (!isWeekly && (dayOfWeek === 'Thursday' || filename.toLowerCase().includes('weekly'))) {
+            isWeekly = true;
+          }
+
+          const bytes = stat.size;
+          let formattedSize = `${bytes} B`;
+          if (bytes >= 1024 * 1024) formattedSize = `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+          else if (bytes >= 1024) formattedSize = `${(bytes / 1024).toFixed(1)} KB`;
+
+          list.push({
+            filename,
+            sizeBytes: bytes,
+            formattedSize,
+            createdAt: stat.mtime.toISOString(),
+            formattedDate,
+            dayOfWeek,
+            triggerType,
+            isWeekly,
+            branchName,
+            summary,
+            storageLocation: locationLabel,
+            windowsBackupPath: `C:\\Cleanera Backups\\${filename}`
+          });
+        } catch (e) {}
+      }
+    } catch (e) {}
+  };
+
+  scanDirectory(BACKUPS_DIR, 'Server /backups');
+  scanDirectory(WINDOWS_BACKUPS_DIR, 'C:\\Cleanera Backups\\');
+
+  // Sort newest first
+  list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  return list;
+}
+
+// Automatic weekly Thursday 7:00 PM scheduler and daily fallback snapshot
+let lastWeeklyThursdayKey = '';
+let lastDailyBackupKey = '';
+
+function checkScheduledBackups() {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+
+  // 1. Local Time Info (Local Windows PC Time)
+  const localDayOfWeek = now.getDay(); // 4 = Thursday
+  const localDateKey = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  const localHour = now.getHours();
+  const localMinute = now.getMinutes();
+
+  // 2. IST (Asia/Kolkata) Info
+  let istDayOfWeek = -1;
+  let istDateKey = '';
+  let istHour = -1;
+  let istMinute = -1;
+  try {
+    const istFormatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      weekday: 'short',
+      hour12: false
+    });
+    const parts = istFormatter.formatToParts(now);
+    const y = parts.find(p => p.type === 'year')?.value;
+    const m = parts.find(p => p.type === 'month')?.value;
+    const d = parts.find(p => p.type === 'day')?.value;
+    const wd = parts.find(p => p.type === 'weekday')?.value;
+    istHour = parseInt(parts.find(p => p.type === 'hour')?.value || '-1', 10);
+    istMinute = parseInt(parts.find(p => p.type === 'minute')?.value || '-1', 10);
+    istDateKey = `${y}-${m}-${d}`;
+    if (wd === 'Thu') istDayOfWeek = 4;
+  } catch (e) {}
+
+  // 3. Check if today is Thursday (Local or IST)
+  const isThursday = localDayOfWeek === 4 || istDayOfWeek === 4;
+  const effectiveThursdayDate = (localDayOfWeek === 4) ? localDateKey : istDateKey;
+
+  // Requirement: Every Thursday at 7:00 PM (19:00), automatically create complete CRM backup
+  // and save a copy outside CRM project folder on Windows PC: C:\Cleanera Backups\
+  const isThursdayAtOrAfter7PM = (localDayOfWeek === 4 && localHour >= 19) || (istDayOfWeek === 4 && istHour >= 19);
+
+  if (isThursday && effectiveThursdayDate && isThursdayAtOrAfter7PM) {
+    const thursdayKey = `weekly_thu_${effectiveThursdayDate}_19-00`;
+    if (lastWeeklyThursdayKey !== thursdayKey) {
+      // Check if a backup matching this Thursday's date already exists on disk
+      let alreadyHasThursdayBackup = false;
+      const checkFolder = (dir: string) => {
+        try {
+          if (fs.existsSync(dir)) {
+            const files = fs.readdirSync(dir);
+            return files.some(f => isBackupFile(f) && f.includes(effectiveThursdayDate));
+          }
+        } catch (e) {}
+        return false;
+      };
+
+      alreadyHasThursdayBackup = checkFolder(BACKUPS_DIR) || checkFolder(WINDOWS_BACKUPS_DIR);
+
+      if (!alreadyHasThursdayBackup) {
+        lastWeeklyThursdayKey = thursdayKey;
+        console.log(`[Cleanera Backup] Thursday 7:00 PM schedule triggered for date ${effectiveThursdayDate}. Creating complete weekly CRM backup and saving copy to C:\\Cleanera Backups\\...`);
+        performBackup('WEEKLY_THURSDAY');
+      } else {
+        lastWeeklyThursdayKey = thursdayKey;
+      }
+    }
+  }
+
+  // 4. Daily evening 7:00 PM snapshot (Fallback safeguard for other days)
+  if (!isThursday) {
+    const localDailyKey = `${localDateKey}_19-00`;
+    const istDailyKey = istDateKey ? `${istDateKey}_19-00_IST` : '';
+
+    if (localHour === 19 && localMinute === 0 && lastDailyBackupKey !== localDailyKey) {
+      lastDailyBackupKey = localDailyKey;
+      console.log(`[Cleanera Backup] Triggering automatic 7:00 PM daily backup (Local)...`);
+      performBackup('AUTOMATIC_7PM');
+    } else if (istHour === 19 && istMinute === 0 && lastDailyBackupKey !== istDailyKey) {
+      lastDailyBackupKey = istDailyKey;
+      console.log(`[Cleanera Backup] Triggering automatic 7:00 PM daily backup (IST)...`);
+      performBackup('AUTOMATIC_7PM');
+    }
+  }
+}
+
+// Check schedule every 20 seconds
+setInterval(checkScheduledBackups, 20000);
+
+// Initialize baseline backup on system start if backups directory is empty
+try {
+  const existing = fs.readdirSync(BACKUPS_DIR).filter(isBackupFile);
+  if (existing.length === 0) {
+    performBackup('INITIAL_BASELINE');
+  }
+} catch (e) {}
+
+// GET /api/backup/status - Status check including next weekly Thursday
+app.get('/api/backup/status', (req, res) => {
+  try {
+    const metaFile = path.join(BACKUPS_DIR, 'last_backup_meta.json');
+    let meta: BackupMeta | null = null;
+    if (fs.existsSync(metaFile)) {
+      meta = JSON.parse(fs.readFileSync(metaFile, 'utf-8'));
+    }
+
+    const backups = getAllBackupsList();
+    const nextThu = getNextThursdayInfo();
+
+    if (!meta && backups.length > 0) {
+      meta = {
+        lastAttempt: backups[0].createdAt,
+        formattedDate: backups[0].formattedDate,
+        lastStatus: 'SUCCESS',
+        lastFilename: backups[0].filename,
+        sizeBytes: backups[0].sizeBytes,
+        triggerType: backups[0].triggerType,
+        error: null,
+        windowsPath: backups[0].windowsBackupPath,
+        windowsSaved: true
+      };
+    }
+
+    res.json({
+      success: true,
+      lastBackup: meta,
+      totalBackups: backups.length,
+      latestFilename: backups[0]?.filename || null,
+      nextScheduledBackup: nextThu.formattedNextThursday,
+      weeklySchedule: 'Every Thursday at 7:00 PM',
+      windowsBackupDir: 'C:\\Cleanera Backups\\',
+      storageLocation: 'Saved to C:\\Cleanera Backups\\ (Outside CRM project folder) and server /backups',
+      keepPreviousBackups: true
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/backup/list - All saved backups with dates, file sizes, and records
+app.get('/api/backup/list', (req, res) => {
+  try {
+    const backups = getAllBackupsList();
+    const nextThu = getNextThursdayInfo();
+    const metaFile = path.join(BACKUPS_DIR, 'last_backup_meta.json');
+    let lastBackupMeta: BackupMeta | null = null;
+    if (fs.existsSync(metaFile)) {
+      try {
+        lastBackupMeta = JSON.parse(fs.readFileSync(metaFile, 'utf-8'));
+      } catch (e) {}
+    }
+
+    res.json({
+      success: true,
+      backups,
+      totalBackups: backups.length,
+      nextScheduledThursday: nextThu.formattedNextThursday,
+      nextThursdayDate: nextThu.nextThursdayDate,
+      isTodayThursday: nextThu.isTodayThursday,
+      scheduleNotice: 'Automatic complete CRM backup runs every Thursday at 7:00 PM',
+      windowsBackupDir: 'C:\\Cleanera Backups\\',
+      storageLocation: 'External Windows PC destination: C:\\Cleanera Backups\\ (non-overwriting retention)',
+      lastBackup: lastBackupMeta || (backups.length > 0 ? {
+        lastStatus: 'SUCCESS',
+        lastFilename: backups[0].filename,
+        formattedDate: backups[0].formattedDate,
+        sizeBytes: backups[0].sizeBytes,
+        windowsPath: backups[0].windowsBackupPath
+      } : null)
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/backup/download/:filename - Download ANY saved backup file
+app.get('/api/backup/download/:filename', (req, res) => {
+  try {
+    const filename = req.params.filename;
+    // Security check: strictly validate filename, prevent path traversal
+    if (!filename || !/^[a-zA-Z0-9._-]+$/.test(filename) || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+      return res.status(400).json({ success: false, error: 'Invalid backup filename parameter.' });
+    }
+    let fullPath = path.join(BACKUPS_DIR, filename);
+    if (!fs.existsSync(fullPath)) {
+      fullPath = path.join(WINDOWS_BACKUPS_DIR, filename);
+    }
+    if (!fs.existsSync(fullPath)) {
+      return res.status(404).json({ success: false, error: 'Requested backup file not found on disk.' });
+    }
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    const fileStream = fs.createReadStream(fullPath);
+    fileStream.pipe(res);
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /api/backup/latest - Direct download of latest backup file (Secured with X-Backup-Key)
+app.get('/api/backup/latest', (req, res) => {
+  const providedKey = req.header('x-backup-key')?.trim();
+  const configuredSecret = process.env.BACKUP_SECRET_KEY || 'Cleanera_Backup_Secure_Key_2026';
+
+  if (!providedKey || providedKey !== configuredSecret) {
+    return res.status(401).json({
+      success: false,
+      error: 'Unauthorized: Missing or invalid X-Backup-Key header.'
+    });
+  }
+
+  try {
+    if (!fs.existsSync(BACKUPS_DIR)) {
+      fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+    }
+    const files = fs.readdirSync(BACKUPS_DIR)
+      .filter(isBackupFile)
+      .sort()
+      .reverse();
+
+    let targetFile = files[0];
+    if (!targetFile) {
+      const created = performBackup('MANUAL');
+      if (created.success && created.filename) {
+        targetFile = created.filename;
+      } else {
+        return res.status(500).json({ success: false, error: 'No backups found and could not generate one.' });
+      }
+    }
+
+    const fullPath = path.join(BACKUPS_DIR, targetFile);
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.download(fullPath, targetFile, (err) => {
+      if (err && !res.headersSent) {
+        res.status(500).json({ success: false, error: err.message });
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/backup/create - On-demand backup trigger
+app.post('/api/backup/create', requireAuth, (req, res) => {
+  const triggerType = req.body?.triggerType || 'MANUAL';
+  const result = performBackup(triggerType, req.body);
+  if (result.success) {
+    res.json({ success: true, backup: result.meta, filename: result.filename });
+  } else {
+    res.status(500).json({ success: false, error: result.error, backup: result.meta });
+  }
+});
+
+// Helper to create an emergency backup of current state before restoring
+function createEmergencyBackup(): { filename: string; fullPath: string; sizeBytes: number } {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const year = now.getFullYear();
+  const month = pad(now.getMonth() + 1);
+  const day = pad(now.getDate());
+  const hours = pad(now.getHours());
+  const minutes = pad(now.getMinutes());
+  const seconds = pad(now.getSeconds());
+
+  const filename = `Cleanera_Backup_Emergency_PreRestore_${year}-${month}-${day}_${hours}-${minutes}-${seconds}.json`;
+  const fullPath = path.join(BACKUPS_DIR, filename);
+
+  const paymentsSummary: any[] = [];
+  (db.orders || []).forEach(ord => {
+    if (Array.isArray(ord.payments)) {
+      ord.payments.forEach((p: any) => {
+        paymentsSummary.push({
+          orderId: ord.id,
+          orderNumber: ord.orderNumber,
+          customerName: ord.customerName,
+          customerMobile: ord.customerMobile,
+          amount: p.amount,
+          mode: p.mode,
+          date: p.date,
+          referenceNumber: p.referenceNumber || '',
+          recordedBy: p.recordedBy || ''
+        });
+      });
+    }
+  });
+
+  const payload = {
+    backupMetadata: {
+      system: 'Cleanera / Trendera Dry Cleaning CRM',
+      version: '2.0.0',
+      triggerType: 'EMERGENCY_PRE_RESTORE',
+      createdAt: now.toISOString(),
+      formattedDate: now.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
+      filename,
+      storeBranch: db.settings?.branchName || 'C2 Sector 1 Noida',
+      branchCode: db.settings?.branchCode || 'TE02',
+      currency: db.settings?.currencySymbol || 'Rs.'
+    },
+    summary: {
+      totalOrders: db.orders?.length || 0,
+      totalCustomers: db.customers?.length || 0,
+      totalPayments: paymentsSummary.length,
+      totalServices: serviceDefinitions?.length || 0,
+      totalGarments: garmentCatalog?.length || 0,
+      totalUsers: (db.users || []).length
+    },
+    businessSettings: db.settings || initialBusinessSettings,
+    customers: db.customers || initialCustomers,
+    orders: db.orders || initialOrders,
+    payments: paymentsSummary,
+    masterData: {
+      services: serviceDefinitions,
+      garments: garmentCatalog
+    },
+    users: (db.users || []).map(sanitizeUser)
+  };
+
+  const jsonString = JSON.stringify(payload, null, 2);
+  fs.writeFileSync(fullPath, jsonString, 'utf-8');
+  saveCopyToWindowsPC(filename, jsonString);
+  const stat = fs.statSync(fullPath);
+  console.log(`[Cleanera Backup] Emergency safety backup created before restore: ${filename} (${stat.size} bytes)`);
+  return { filename, fullPath, sizeBytes: stat.size };
+}
+
+// POST /api/backup/restore-saved/:filename - Restore from a saved backup file on server
+app.post('/api/backup/restore-saved/:filename', requireAuth, requireRole('ADMIN'), (req, res) => {
+  try {
+    const filename = req.params.filename;
+    if (!filename || !/^[a-zA-Z0-9._-]+$/.test(filename) || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+      return res.status(400).json({ success: false, error: 'Invalid backup filename.' });
+    }
+    let fullPath = path.join(BACKUPS_DIR, filename);
+    if (!fs.existsSync(fullPath)) {
+      fullPath = path.join(WINDOWS_BACKUPS_DIR, filename);
+    }
+    if (!fs.existsSync(fullPath)) {
+      return res.status(404).json({ success: false, error: 'Specified backup file not found on disk.' });
+    }
+
+    const raw = fs.readFileSync(fullPath, 'utf-8');
+    const backupData = JSON.parse(raw);
+
+    // 1. Strict validation of Cleanera backup structure
+    if (!backupData || typeof backupData !== 'object') {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid backup file format. Expected a valid JSON object.'
+      });
+    }
+
+    const hasCleaneraMeta = backupData.backupMetadata && (
+      (typeof backupData.backupMetadata.system === 'string' &&
+        (backupData.backupMetadata.system.toLowerCase().includes('cleanera') ||
+         backupData.backupMetadata.system.toLowerCase().includes('trendera'))) ||
+      backupData.backupMetadata.version
+    );
+
+    const hasCleaneraData = (Array.isArray(backupData.orders) && Array.isArray(backupData.customers)) ||
+      (backupData.businessSettings && (Array.isArray(backupData.orders) || Array.isArray(backupData.customers)));
+
+    if (!hasCleaneraMeta && !hasCleaneraData) {
+      return res.status(400).json({
+        success: false,
+        error: 'Validation failed: The provided file is not a valid Cleanera CRM backup. Missing required CRM records.'
+      });
+    }
+
+    // 2. Automatically create an emergency backup of current live data before touching anything
+    if (!fs.existsSync(BACKUPS_DIR)) {
+      fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+    }
+    const emergencyBackup = createEmergencyBackup();
+
+    // 3. Apply the restore data safely
+    if (Array.isArray(backupData.orders)) {
+      db.orders = backupData.orders;
+    }
+    if (Array.isArray(backupData.customers)) {
+      db.customers = backupData.customers;
+    }
+    if (backupData.businessSettings && typeof backupData.businessSettings === 'object') {
+      db.settings = { ...db.settings, ...backupData.businessSettings };
+    }
+
+    // Safely restore users without locking out the Admin
+    if (Array.isArray(backupData.users) && backupData.users.length > 0) {
+      const existingUsers = [...db.users];
+      db.users = backupData.users.map((u: any) => {
+        const existing = existingUsers.find(ex => ex.id === u.id || ex.username?.toLowerCase() === u.username?.toLowerCase());
+        const hash = existing?.passwordHash || bcrypt.hashSync(u.role === 'ADMIN' ? INITIAL_ADMIN_PASSWORD : INITIAL_MANAGER_PASSWORD, 10);
+        return {
+          id: u.id || `usr-${Date.now()}-${Math.random()}`,
+          username: u.username,
+          name: u.name || u.username,
+          email: u.email || '',
+          mobile: u.mobile || '',
+          passwordHash: hash,
+          role: u.role === 'ADMIN' ? 'ADMIN' : 'MANAGER',
+          active: u.active !== undefined ? Boolean(u.active) : true,
+          status: (u.active !== false && u.status !== 'INACTIVE') ? 'ACTIVE' : 'INACTIVE',
+          storeOrWorkshop: u.storeOrWorkshop || 'C2 Sector 1 Noida',
+          assignedStore: u.assignedStore || u.storeOrWorkshop || 'C2 Sector 1 Noida',
+          discountAllowed: Boolean(u.discountAllowed),
+          maxDiscountPercent: typeof u.maxDiscountPercent === 'number' ? u.maxDiscountPercent : 0,
+          avatarInitial: u.avatarInitial || (u.name ? u.name.charAt(0).toUpperCase() : 'U'),
+          createdAt: u.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+      });
+
+      // Ensure at least one active Admin exists
+      if (!db.users.some(u => u.role === 'ADMIN' && u.active)) {
+        db.users.unshift(getInitialUsers()[0]);
+      }
+    }
+
+    // 4. Persist restored data to disk
+    saveDatabase();
+
+    // 5. Update last_backup_meta.json with information
+    const now = new Date();
+    const meta: BackupMeta = {
+      lastAttempt: now.toISOString(),
+      formattedDate: now.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
+      lastStatus: 'SUCCESS',
+      lastFilename: emergencyBackup.filename,
+      sizeBytes: emergencyBackup.sizeBytes,
+      triggerType: 'RESTORE_OPERATION',
+      error: null,
+      summary: {
+        totalOrders: db.orders.length,
+        totalCustomers: db.customers.length,
+        totalUsers: db.users.length,
+        restoredFrom: filename,
+        emergencyBackupFile: emergencyBackup.filename
+      }
+    };
+    try {
+      fs.writeFileSync(path.join(BACKUPS_DIR, 'last_backup_meta.json'), JSON.stringify(meta, null, 2), 'utf-8');
+    } catch (e) {}
+
+    console.log(`[Cleanera Backup] Restore from ${filename} completed successfully. Restored ${db.orders.length} orders, ${db.customers.length} customers.`);
+
+    res.json({
+      success: true,
+      message: `Cleanera backup successfully restored from ${filename}.`,
+      emergencyBackupFilename: emergencyBackup.filename,
+      restoredSummary: {
+        totalOrders: db.orders.length,
+        totalCustomers: db.customers.length,
+        totalUsers: db.users.length,
+        branchName: db.settings?.branchName || 'C2 Sector 1 Noida'
+      },
+      backupData
+    });
+  } catch (err: any) {
+    console.error('[Cleanera Backup] Restore from file failed:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message || 'An unexpected error occurred while restoring the backup.'
+    });
+  }
+});
+
+// POST /api/backup/restore - Admin-only backup restore with emergency pre-backup
+app.post('/api/backup/restore', requireAuth, requireRole('ADMIN'), (req, res) => {
+  try {
+    const backupData = req.body;
+
+    // 1. Strict validation of Cleanera backup structure
+    if (!backupData || typeof backupData !== 'object') {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid backup file format. Expected a valid JSON object.'
+      });
+    }
+
+    const hasCleaneraMeta = backupData.backupMetadata && (
+      (typeof backupData.backupMetadata.system === 'string' &&
+        (backupData.backupMetadata.system.toLowerCase().includes('cleanera') ||
+         backupData.backupMetadata.system.toLowerCase().includes('trendera'))) ||
+      backupData.backupMetadata.version
+    );
+
+    const hasCleaneraData = (Array.isArray(backupData.orders) && Array.isArray(backupData.customers)) ||
+      (backupData.businessSettings && (Array.isArray(backupData.orders) || Array.isArray(backupData.customers)));
+
+    if (!hasCleaneraMeta && !hasCleaneraData) {
+      return res.status(400).json({
+        success: false,
+        error: 'Validation failed: The provided file is not a valid Cleanera CRM backup. Missing required CRM records (orders, customers, settings).'
+      });
+    }
+
+    // 2. Automatically create an emergency backup of current data before touching anything
+    if (!fs.existsSync(BACKUPS_DIR)) {
+      fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+    }
+    const emergencyBackup = createEmergencyBackup();
+
+    // 3. Apply the restore data safely
+    if (Array.isArray(backupData.orders)) {
+      db.orders = backupData.orders;
+    }
+    if (Array.isArray(backupData.customers)) {
+      db.customers = backupData.customers;
+    }
+    if (backupData.businessSettings && typeof backupData.businessSettings === 'object') {
+      db.settings = { ...db.settings, ...backupData.businessSettings };
+    }
+
+    // Safely restore users without locking out the Admin
+    if (Array.isArray(backupData.users) && backupData.users.length > 0) {
+      const existingUsers = [...db.users];
+      db.users = backupData.users.map((u: any) => {
+        const existing = existingUsers.find(ex => ex.id === u.id || ex.username?.toLowerCase() === u.username?.toLowerCase());
+        const hash = existing?.passwordHash || bcrypt.hashSync(u.role === 'ADMIN' ? INITIAL_ADMIN_PASSWORD : INITIAL_MANAGER_PASSWORD, 10);
+        return {
+          id: u.id || `usr-${Date.now()}-${Math.random()}`,
+          username: u.username,
+          name: u.name || u.username,
+          email: u.email || '',
+          mobile: u.mobile || '',
+          passwordHash: hash,
+          role: u.role === 'ADMIN' ? 'ADMIN' : 'MANAGER',
+          active: u.active !== undefined ? Boolean(u.active) : true,
+          status: (u.active !== false && u.status !== 'INACTIVE') ? 'ACTIVE' : 'INACTIVE',
+          storeOrWorkshop: u.storeOrWorkshop || 'C2 Sector 1 Noida',
+          assignedStore: u.assignedStore || u.storeOrWorkshop || 'C2 Sector 1 Noida',
+          discountAllowed: Boolean(u.discountAllowed),
+          maxDiscountPercent: typeof u.maxDiscountPercent === 'number' ? u.maxDiscountPercent : 0,
+          avatarInitial: u.avatarInitial || (u.name ? u.name.charAt(0).toUpperCase() : 'U'),
+          createdAt: u.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+      });
+
+      // Ensure at least one active Admin exists
+      if (!db.users.some(u => u.role === 'ADMIN' && u.active)) {
+        db.users.unshift(getInitialUsers()[0]);
+      }
+    }
+
+    // 4. Persist restored data to disk
+    saveDatabase();
+
+    // 5. Update last_backup_meta.json with information
+    const now = new Date();
+    const meta: BackupMeta = {
+      lastAttempt: now.toISOString(),
+      formattedDate: now.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
+      lastStatus: 'SUCCESS',
+      lastFilename: emergencyBackup.filename,
+      sizeBytes: emergencyBackup.sizeBytes,
+      triggerType: 'RESTORE_OPERATION',
+      error: null,
+      summary: {
+        totalOrders: db.orders.length,
+        totalCustomers: db.customers.length,
+        totalUsers: db.users.length,
+        restoredFrom: backupData.backupMetadata?.filename || 'Uploaded JSON file',
+        emergencyBackupFile: emergencyBackup.filename
+      }
+    };
+    try {
+      fs.writeFileSync(path.join(BACKUPS_DIR, 'last_backup_meta.json'), JSON.stringify(meta, null, 2), 'utf-8');
+    } catch (e) {}
+
+    console.log(`[Cleanera Backup] Restore completed successfully. Restored ${db.orders.length} orders, ${db.customers.length} customers.`);
+
+    res.json({
+      success: true,
+      message: 'Cleanera backup successfully restored.',
+      emergencyBackupFilename: emergencyBackup.filename,
+      restoredSummary: {
+        totalOrders: db.orders.length,
+        totalCustomers: db.customers.length,
+        totalUsers: db.users.length,
+        branchName: db.settings?.branchName || 'C2 Sector 1 Noida'
+      },
+      backupData
+    });
+  } catch (err: any) {
+    console.error('[Cleanera Backup] Restore failed:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message || 'An unexpected error occurred while restoring the backup.'
+    });
+  }
+});
+
+// -------------------------------------------------------------
 // VITE MIDDLEWARE & SPA SERVING
 // -------------------------------------------------------------
 async function startServer() {
+  const renderPortalInvoiceHtml = async (req: express.Request, res: express.Response, viteInstance?: any) => {
+    try {
+      const isProd = process.env.NODE_ENV === 'production';
+      const indexPath = isProd 
+        ? path.join(process.cwd(), 'dist', 'index.html')
+        : path.join(process.cwd(), 'index.html');
+
+      if (!fs.existsSync(indexPath)) {
+        return res.status(404).send('Not Found');
+      }
+
+      let html = fs.readFileSync(indexPath, 'utf-8');
+
+      // WhatsApp / Social Link Preview Metadata
+      const portalTitle = 'Trendera Invoice';
+      const portalDescription = 'Trendera Customer Invoice / Receipt';
+
+      // Update / inject <title>
+      if (html.includes('<title>')) {
+        html = html.replace(/<title>.*?<\/title>/i, `<title>${portalTitle}</title>`);
+      } else {
+        html = html.replace('</head>', `  <title>${portalTitle}</title>\n</head>`);
+      }
+
+      // Update / inject <meta name="description">
+      if (html.includes('name="description"')) {
+        html = html.replace(/<meta\s+name="description"\s+content=".*?"\s*\/?>/i, `<meta name="description" content="${portalDescription}" />`);
+      } else {
+        html = html.replace('</head>', `  <meta name="description" content="${portalDescription}" />\n</head>`);
+      }
+
+      // Update / inject <meta property="og:title">
+      if (html.includes('property="og:title"')) {
+        html = html.replace(/<meta\s+property="og:title"\s+content=".*?"\s*\/?>/i, `<meta property="og:title" content="${portalTitle}" />`);
+      } else {
+        html = html.replace('</head>', `  <meta property="og:title" content="${portalTitle}" />\n</head>`);
+      }
+
+      // Update / inject <meta property="og:description">
+      if (html.includes('property="og:description"')) {
+        html = html.replace(/<meta\s+property="og:description"\s+content=".*?"\s*\/?>/i, `<meta property="og:description" content="${portalDescription}" />`);
+      } else {
+        html = html.replace('</head>', `  <meta property="og:description" content="${portalDescription}" />\n</head>`);
+      }
+
+      // Ensure og:site_name, og:type, and twitter tags are present
+      if (!html.includes('property="og:site_name"')) {
+        const extraMeta = `  <meta property="og:site_name" content="Trendera" />\n  <meta property="og:type" content="website" />\n  <meta name="twitter:card" content="summary" />\n  <meta name="twitter:title" content="${portalTitle}" />\n  <meta name="twitter:description" content="${portalDescription}" />\n`;
+        html = html.replace('</head>', `${extraMeta}</head>`);
+      }
+
+      if (viteInstance) {
+        html = await viteInstance.transformIndexHtml(req.originalUrl || req.url, html);
+      }
+
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.status(200).send(html);
+    } catch (err) {
+      console.error('Error generating portal invoice HTML:', err);
+      res.status(500).send('Internal Server Error');
+    }
+  };
+
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      configFile: path.resolve(process.cwd(), 'vite.config.ts'),
+      server: {
+        middlewareMode: true,
+        allowedHosts: [
+          'crm.trenderacleaners.com',
+          '.trenderacleaners.com',
+          'trenderacleaners.com',
+          '.trycloudflare.com',
+          '*.trycloudflare.com',
+        ],
+      },
       appType: 'spa',
     });
+
+    // Handle /portal/invoice requests explicitly before Vite's default index.html handler
+    app.get(['/portal/invoice', '/portal/invoice/*'], async (req, res) => {
+      await renderPortalInvoiceHtml(req, res, vite);
+    });
+
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
+
+    // Handle /portal/invoice requests in production
+    app.get(['/portal/invoice', '/portal/invoice/*'], async (req, res) => {
+      await renderPortalInvoiceHtml(req, res);
+    });
+
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));

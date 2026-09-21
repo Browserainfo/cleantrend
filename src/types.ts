@@ -10,6 +10,7 @@ export interface User {
   email: string;
   role: UserRole;
   active: boolean;
+  isActive?: boolean;
   status: UserStatus;
   storeOrWorkshop?: string;
   assignedStore?: string;
@@ -71,8 +72,10 @@ export interface OrderGarmentItem {
   category: GarmentCategory;
   serviceCode: ServiceCode;
   serviceName: string;
+  serviceType?: string;
   quantity: number;
   basePrice: number;
+  unitPrice?: number;
   subServices: SubServiceItem[]; // ST (50), SP (50), ALT (40)
   totalItemPrice: number; // basePrice + subServices sum
   remarks: string[]; // e.g. ["On Hanger", "Stain on collar"]
@@ -110,6 +113,7 @@ export interface Order {
   orderNumber: number; // e.g. 4
   branchCode: string; // e.g. "TE02" (dynamic from businessSettings.branchCode)
   orderSeries: string; // e.g. "*4-2*"
+  barcode?: string; // Master order barcode if generated
   orderType: OrderType;
   customerId: string;
   customerName: string;
@@ -135,6 +139,8 @@ export interface Order {
   netAmount: number; // 1074.00
   advancePaid: number; // 0.00
   balanceDue: number; // 1074.00 (Net - Advance - Total Payments)
+  previousOrderPending?: number; // Balance due from customer's previous/last order at time of booking
+  previousOrderNumber?: number; // Previous order number reference
   adjustmentApplied?: number; // Previous customer adjustment balance applied to this bill (e.g. ₹5)
   differenceAction?: 'WAIVE' | 'CARRY_FORWARD'; // Payment difference resolution choice
   differenceAmount?: number; // e.g. ₹5
@@ -150,6 +156,8 @@ export interface Order {
   deliveryNotes?: string;
   customerSignature?: string; // base64 data url
   receiptUrl: string; // e.g. "https://cleanera.app/portal/invoice?Reciept=TE02-4-1074-Cust62-183"
+  submittedUpiRef?: string; // Customer submitted UPI UTR / Transaction reference
+  upiRefSubmittedAt?: string;
   createdAt: string;
   createdBy: string;
   updatedAt?: string;
@@ -176,6 +184,7 @@ export interface Customer {
 }
 
 export interface BusinessSettings {
+  storeName?: string; // Admin Settings -> Store Name dynamically used for WhatsApp & notifications (e.g. "Trendera")
   businessName: string; // e.g. "Trendera Dry Cleaning CRM"
   displayName: string;
   legalName: string;
@@ -190,6 +199,8 @@ export interface BusinessSettings {
   email: string;
   website: string;
   taxNumber: string; // GST/VAT
+  gstin?: string; // e.g. 07AAECR5512L1ZS
+  allowManagerEditBooking?: boolean;
   logoUrl: string;
   faviconUrl: string;
   marketingMessage: string; // "Your space for marketing or any other message."
@@ -295,11 +306,15 @@ export interface AuditLogEntry {
   orderId?: string;
   orderNumber?: number;
   action: string;
+  actionType?: string;
   changedBy: string;
+  performedByName?: string;
+  performedByRole?: string;
   userRole: UserRole;
   fieldName?: string;
   previousValue?: string | number;
   newValue?: string | number;
+  details?: string;
   reason?: string;
   timestamp: string;
   ipAddress?: string;

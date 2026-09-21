@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Order, OrderGarmentItem } from '../../types';
 import { 
@@ -24,9 +24,11 @@ import {
   MapPin,
   FileText,
   CreditCard,
-  Ban
+  Ban,
+  QrCode
 } from 'lucide-react';
 import { normalizeIndianPhoneNumber } from '../../utils/phoneUtils';
+import { buildPublicReceiptUrl } from '../../utils/portalUrlUtils';
 
 export const OrderManagementScreen: React.FC = () => {
   const { 
@@ -36,6 +38,7 @@ export const OrderManagementScreen: React.FC = () => {
     businessSettings, 
     currentRole,
     setActiveView, 
+    activeOrderId,
     setActiveOrderId,
     setThermalReceiptModalOpen,
     setGarmentTagPrintModalOpen,
@@ -163,6 +166,18 @@ export const OrderManagementScreen: React.FC = () => {
     setIsAddingPayment(false);
     setPaymentAmount(order.balanceDue > 0 ? order.balanceDue : 0);
   };
+
+  // Automatically open Edit Modal ONLY if navigated with an explicit activeOrderId (e.g., from Customer Screen)
+  useEffect(() => {
+    if (activeOrderId) {
+      const target = orders.find(o => o.id === activeOrderId || String(o.orderNumber) === String(activeOrderId));
+      if (target) {
+        handleOpenEditModal(target);
+      }
+      // Clear activeOrderId once consumed so it doesn't persist and automatically re-open
+      setActiveOrderId('');
+    }
+  }, [activeOrderId, orders, setActiveOrderId]);
 
   // Live Recalculations for Editing Order
   const recalculatedTotals = useMemo(() => {
@@ -356,13 +371,18 @@ export const OrderManagementScreen: React.FC = () => {
       deliveryNotes: editDeliveryNotes,
       items: editItems,
       totalPieces: recalculatedTotals.totalPcs,
-      payments: editingOrder.payments || []
+      payments: editingOrder.payments || [],
+      receiptUrl: buildPublicReceiptUrl({
+        ...editingOrder,
+        netAmount: recalculatedTotals.roundedNet
+      }, businessSettings)
     };
 
     const res = updateOrder(editingOrder.id, updatedData);
     if (res.success) {
       showToast(`Order #${editingOrder.orderNumber} changes saved successfully!`, 'success');
       setEditingOrder(null);
+      setActiveOrderId('');
     } else {
       showToast(res.error || 'Failed to update order.', 'error');
     }
@@ -375,6 +395,7 @@ export const OrderManagementScreen: React.FC = () => {
     if (res.success) {
       setConfirmCancelModalOpen(false);
       setEditingOrder(null);
+      setActiveOrderId('');
     }
   };
 
@@ -385,6 +406,7 @@ export const OrderManagementScreen: React.FC = () => {
     if (res.success) {
       setConfirmDeleteModalOpen(false);
       setEditingOrder(null);
+      setActiveOrderId('');
     }
   };
 
@@ -736,8 +758,12 @@ export const OrderManagementScreen: React.FC = () => {
                 </div>
 
                 <button
-                  onClick={() => setEditingOrder(null)}
+                  onClick={() => {
+                    setEditingOrder(null);
+                    setActiveOrderId('');
+                  }}
                   className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+                  title="Close"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -817,10 +843,15 @@ export const OrderManagementScreen: React.FC = () => {
                     <div>
                       <label className="text-[11px] font-semibold text-slate-600">Delivery / Pick Charge (₹)</label>
                       <input
-                        type="number"
-                        min="0"
-                        value={editDeliveryCharge}
-                        onChange={(e) => setEditDeliveryCharge(Math.max(0, Number(e.target.value)))}
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0"
+                        value={editDeliveryCharge === 0 ? '' : editDeliveryCharge}
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => {
+                          const cleaned = e.target.value.replace(/[^0-9.]/g, '').replace(/^0+(?=\d)/, '');
+                          setEditDeliveryCharge(cleaned === '' ? 0 : Math.max(0, parseFloat(cleaned) || 0));
+                        }}
                         className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-xs outline-none focus:ring-1 focus:ring-sky-500 font-bold"
                       />
                     </div>
@@ -927,21 +958,29 @@ export const OrderManagementScreen: React.FC = () => {
                         <div className="w-16">
                           <label className="text-[10px] font-bold text-slate-600">Qty</label>
                           <input
-                            type="number"
-                            min="1"
+                            type="text"
+                            inputMode="numeric"
                             value={newItemQty}
-                            onChange={(e) => setNewItemQty(Math.max(1, parseInt(e.target.value) || 1))}
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => {
+                              const cleaned = e.target.value.replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '');
+                              setNewItemQty(cleaned === '' ? 1 : Math.max(1, parseInt(cleaned, 10) || 1));
+                            }}
                             className="w-full px-2 py-1.5 bg-white border border-slate-300 rounded text-xs font-bold text-center"
                           />
                         </div>
                         <div className="flex-1">
                           <label className="text-[10px] font-bold text-slate-600">Unit Price (₹)</label>
                           <input
-                            type="number"
-                            min="0"
+                            type="text"
+                            inputMode="decimal"
                             placeholder="Price"
-                            value={newItemPrice || ''}
-                            onChange={(e) => setNewItemPrice(Math.max(0, parseFloat(e.target.value) || 0))}
+                            value={newItemPrice === 0 ? '' : newItemPrice}
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => {
+                              const cleaned = e.target.value.replace(/[^0-9.]/g, '').replace(/^0+(?=\d)/, '');
+                              setNewItemPrice(cleaned === '' ? 0 : Math.max(0, parseFloat(cleaned) || 0));
+                            }}
                             className="w-full px-2 py-1.5 bg-white border border-slate-300 rounded text-xs font-bold text-center"
                           />
                         </div>
@@ -1048,10 +1087,14 @@ export const OrderManagementScreen: React.FC = () => {
                                   -
                                 </button>
                                 <input
-                                  type="number"
-                                  min="1"
+                                  type="text"
+                                  inputMode="numeric"
                                   value={item.quantity || 1}
-                                  onChange={(e) => handleItemQtyChange(idx, parseInt(e.target.value) || 1)}
+                                  onFocus={(e) => e.target.select()}
+                                  onChange={(e) => {
+                                    const cleaned = e.target.value.replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '');
+                                    handleItemQtyChange(idx, cleaned === '' ? 1 : parseInt(cleaned, 10) || 1);
+                                  }}
                                   className="w-10 text-center font-bold px-1 py-0.5 border border-slate-300 rounded text-xs"
                                 />
                                 <button
@@ -1067,10 +1110,15 @@ export const OrderManagementScreen: React.FC = () => {
                             {/* Unit Price */}
                             <td className="py-2.5 px-3 text-right">
                               <input
-                                type="number"
-                                min="0"
-                                value={unitPrice}
-                                onChange={(e) => handleItemPriceChange(idx, parseFloat(e.target.value) || 0)}
+                                type="text"
+                                inputMode="decimal"
+                                placeholder="0"
+                                value={unitPrice === 0 ? '' : unitPrice}
+                                onFocus={(e) => e.target.select()}
+                                onChange={(e) => {
+                                  const cleaned = e.target.value.replace(/[^0-9.]/g, '').replace(/^0+(?=\d)/, '');
+                                  handleItemPriceChange(idx, cleaned === '' ? 0 : parseFloat(cleaned) || 0);
+                                }}
                                 className="w-20 text-right font-bold px-1.5 py-1 border border-slate-300 rounded text-xs"
                               />
                             </td>
@@ -1112,11 +1160,15 @@ export const OrderManagementScreen: React.FC = () => {
                     <div>
                       <label className="text-[11px] font-semibold text-slate-600">Discount Percentage (%)</label>
                       <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        value={editDiscountPercent}
-                        onChange={(e) => setEditDiscountPercent(Math.min(100, Math.max(0, Number(e.target.value))))}
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="0"
+                        value={editDiscountPercent === 0 ? '' : editDiscountPercent}
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => {
+                          const cleaned = e.target.value.replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '');
+                          setEditDiscountPercent(cleaned === '' ? 0 : Math.min(100, Math.max(0, parseInt(cleaned, 10) || 0)));
+                        }}
                         className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-xs font-bold"
                       />
                       <div className="text-[10px] text-rose-600 font-semibold pt-0.5">
@@ -1220,6 +1272,35 @@ export const OrderManagementScreen: React.FC = () => {
                     </div>
                   </div>
 
+                  {/* Customer Submitted UPI Reference Banner */}
+                  {editingOrder.submittedUpiRef && recalculatedTotals.balance > 0 && (
+                    <div className="bg-sky-950/80 border border-sky-600/70 p-2.5 rounded text-xs space-y-1 text-sky-200">
+                      <div className="font-bold flex items-center justify-between text-sky-300">
+                        <span className="flex items-center gap-1.5">
+                          <QrCode className="w-3.5 h-3.5 text-sky-400" />
+                          Customer Submitted UPI UTR Reference:
+                        </span>
+                        <span className="font-mono bg-sky-900 px-2 py-0.5 rounded text-white font-black">{editingOrder.submittedUpiRef}</span>
+                      </div>
+                      <div className="text-[11px] text-slate-300">
+                        Customer paid online via UPI scanner. Please check Pritpal's HDFC bank account statement for ₹{recalculatedTotals.balance.toFixed(2)}.
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsAddingPayment(true);
+                          setPaymentAmount(recalculatedTotals.balance);
+                          setPaymentMethod('UPI');
+                          setPaymentNotes(`Verified UPI UTR: ${editingOrder.submittedUpiRef}`);
+                        }}
+                        className="mt-1 px-2.5 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded text-[11px] font-bold cursor-pointer flex items-center gap-1"
+                      >
+                        <CreditCard className="w-3.5 h-3.5" />
+                        <span>Confirm & Record Verified UPI Payment</span>
+                      </button>
+                    </div>
+                  )}
+
                   {/* Payment Settlement Action */}
                   {recalculatedTotals.balance > 0 ? (
                     <div className="bg-slate-800 p-2.5 rounded border border-slate-700 space-y-2">
@@ -1249,11 +1330,15 @@ export const OrderManagementScreen: React.FC = () => {
                             <div>
                               <label className="text-[10px] text-slate-400">Amount (₹)</label>
                               <input
-                                type="number"
-                                min="1"
-                                max={recalculatedTotals.balance}
-                                value={paymentAmount}
-                                onChange={(e) => setPaymentAmount(Math.max(0, parseFloat(e.target.value) || 0))}
+                                type="text"
+                                inputMode="decimal"
+                                placeholder="0.00"
+                                value={paymentAmount === 0 ? '' : paymentAmount}
+                                onFocus={(e) => e.target.select()}
+                                onChange={(e) => {
+                                  const cleaned = e.target.value.replace(/[^0-9.]/g, '').replace(/^0+(?=\d)/, '');
+                                  setPaymentAmount(cleaned === '' ? 0 : Math.max(0, parseFloat(cleaned) || 0));
+                                }}
                                 className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-xs font-bold text-emerald-400"
                               />
                             </div>
@@ -1342,7 +1427,10 @@ export const OrderManagementScreen: React.FC = () => {
 
                 <button
                   type="button"
-                  onClick={() => setEditingOrder(null)}
+                  onClick={() => {
+                    setEditingOrder(null);
+                    setActiveOrderId('');
+                  }}
                   className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-xs font-semibold transition"
                 >
                   Close

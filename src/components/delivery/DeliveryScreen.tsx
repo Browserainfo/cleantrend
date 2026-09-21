@@ -127,15 +127,19 @@ export const DeliveryScreen: React.FC = () => {
     setBarcodeInput('');
   };
 
-  // Compute selected items partial amount
+  // Compute amount due for selected garments
   const selectedItems = order.items.filter(i => selectedBarcodes.includes(i.barcode));
-  const selectedGross = selectedItems.reduce((acc, item) => acc + (item.totalItemPrice * item.quantity), 0);
-  const selectedTax = Number(((selectedGross * order.taxRatePercent) / 100).toFixed(2));
-  const selectedRawNet = selectedGross + selectedTax;
-  const selectedCalculatedAmount = selectedCount === totalCount ? order.balanceDue : Number(selectedRawNet.toFixed(2));
+  const totalItemPieces = order.items.reduce((acc, item) => acc + (item.quantity || 1), 0) || totalCount || 1;
+  const selectedItemPieces = selectedItems.reduce((acc, item) => acc + (item.quantity || 1), 0) || selectedCount;
 
-  // Screenshot 15 shows amount 259.60 when 2 items are selected
-  const partialAmountDisplay = selectedCount === 2 ? 259.60 : selectedCalculatedAmount;
+  // When order is fully paid, collection amount is 0.00
+  // When all items are selected for delivery, collection amount is order.balanceDue
+  // When partially selected, amount is proportional share of the unpaid balanceDue (capped at balanceDue)
+  const calculatedCollectionAmount = order.balanceDue <= 0
+    ? 0
+    : (selectedCount === totalCount || selectedItemPieces >= totalItemPieces)
+    ? Number(order.balanceDue.toFixed(2))
+    : Number(Math.min(order.balanceDue, (selectedItemPieces / totalItemPieces) * order.balanceDue).toFixed(2));
 
   // Handle Accept Payment and Deliver
   const handleOpenPaymentAndDeliver = () => {
@@ -143,7 +147,7 @@ export const DeliveryScreen: React.FC = () => {
       showToast('Please select at least one garment for delivery.', 'warning');
       return;
     }
-    setPaymentAmountInput(partialAmountDisplay.toString());
+    setPaymentAmountInput(calculatedCollectionAmount.toFixed(2));
     setDifferenceOption(null);
     setIsPaymentDeliverModalOpen(true);
   };
@@ -620,7 +624,7 @@ export const DeliveryScreen: React.FC = () => {
             /* Screenshot 15: Partial Selection Mode */
             <div className="space-y-3 py-2 text-xs flex-1 bg-slate-700/50 p-3 rounded-lg border border-slate-500/60">
               <div className="text-center font-bold text-slate-200 pb-1 border-b border-slate-500/50">
-                27 Nov 2025
+                {order.orderDate || new Date().toLocaleDateString('en-GB')}
               </div>
 
               <div className="grid grid-cols-2 gap-2 text-center py-1">
@@ -631,23 +635,28 @@ export const DeliveryScreen: React.FC = () => {
                 
                 <div className="bg-slate-800/80 p-2 rounded border border-slate-600">
                   <div className="text-[10px] text-slate-400 uppercase font-medium">Current Due</div>
-                  <div className="text-lg font-extrabold text-emerald-300 font-mono">{order.balanceDue.toFixed(2)}</div>
+                  <div className={`text-lg font-extrabold font-mono ${order.balanceDue > 0 ? 'text-rose-400' : 'text-emerald-300'}`}>
+                    {order.balanceDue.toFixed(2)}
+                  </div>
                 </div>
               </div>
 
-              {/* Amount input field matching Screenshot 15 */}
+              {/* Amount input field */}
               <div className="flex items-center justify-between bg-slate-800 px-3 py-2 rounded border border-slate-600">
                 <span className="text-xs font-semibold text-slate-300">Amount</span>
                 <input
                   type="number"
-                  value={partialAmountDisplay}
+                  step="0.01"
+                  value={paymentAmountInput !== '' ? paymentAmountInput : calculatedCollectionAmount.toFixed(2)}
                   onChange={(e) => setPaymentAmountInput(e.target.value)}
                   className="w-24 text-right bg-white text-slate-900 font-mono font-bold text-sm px-2 py-0.5 rounded shadow-inner outline-none"
                 />
               </div>
 
               <div className="text-[10px] text-slate-300 leading-tight">
-                Partial delivery calculated for {selectedCount} of {totalCount} garments.
+                {selectedCount === totalCount
+                  ? 'All garments selected for handover.'
+                  : `Partial delivery calculated for ${selectedCount} of ${totalCount} garments.`}
               </div>
             </div>
           )}
@@ -773,14 +782,28 @@ export const DeliveryScreen: React.FC = () => {
                 </div>
                 <div className="text-right">
                   <div className="text-slate-500">Balance Due</div>
-                  <div className="text-lg font-bold text-emerald-700 font-mono">Rs. {order.balanceDue.toFixed(2)}</div>
+                  <div className={`text-lg font-bold font-mono ${order.balanceDue > 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
+                    Rs. {order.balanceDue.toFixed(2)}
+                  </div>
                 </div>
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Collection Amount (Rs.):</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-semibold text-slate-700">Collection Amount (Rs.):</label>
+                  {order.balanceDue <= 0 ? (
+                    <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                      Paid in Full • No Due
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-slate-500">
+                      Remaining Due: Rs. {order.balanceDue.toFixed(2)}
+                    </span>
+                  )}
+                </div>
                 <input
                   type="number"
+                  step="0.01"
                   value={paymentAmountInput}
                   onChange={(e) => {
                     setPaymentAmountInput(e.target.value);

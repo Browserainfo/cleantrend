@@ -335,21 +335,33 @@ export const BusinessSettingsModal: React.FC<{ isOpen: boolean; onClose: () => v
           {/* TAB 1: BUSINESS PROFILE */}
           {activeTab === 'IDENTITY' && (
             <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Business Name (Header/Receipt)</label>
+                  <label className="block font-semibold text-slate-700 mb-1">Store Name (WhatsApp)</label>
+                  <input
+                    type="text"
+                    disabled={isManager}
+                    value={formData.storeName || ''}
+                    onChange={(e) => handleInputChange('storeName', e.target.value)}
+                    className="w-full p-2 border border-slate-300 rounded text-slate-900 font-medium disabled:bg-slate-100"
+                    placeholder="Trendera"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Business Name (Receipts)</label>
                   <input
                     type="text"
                     disabled={isManager}
                     value={formData.businessName}
                     onChange={(e) => handleInputChange('businessName', e.target.value)}
                     className="w-full p-2 border border-slate-300 rounded text-slate-900 font-medium disabled:bg-slate-100"
-                    placeholder="Cleanera Dry Cleaning CRM"
+                    placeholder="Trendera Dry Cleaning"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Branch / Store Name</label>
+                  <label className="block font-semibold text-slate-700 mb-1">Branch / Location</label>
                   <input
                     type="text"
                     disabled={isManager}

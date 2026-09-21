@@ -20,7 +20,6 @@ import {
   ExternalLink, 
   MessageSquare,
   Sparkles,
-  ChevronRight,
   RotateCcw,
   Check,
   User,

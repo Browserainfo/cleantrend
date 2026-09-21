@@ -13,10 +13,12 @@ import {
   Search, 
   Save, 
   CheckCircle,
-  X
+  X,
+  FileText
 } from 'lucide-react';
 import { garmentCatalog, serviceDefinitions } from '../../data/initialData';
 import { GarmentMaster, ServiceDefinition, GarmentCategory } from '../../types';
+import { PdfPriceListImportModal } from './PdfPriceListImportModal';
 
 const MASTER_GARMENTS_STORAGE_KEY = 'cleanera_master_garments';
 
@@ -49,6 +51,33 @@ const MASTER_SERVICE_OPTIONS = [
 export const MasterDataScreen: React.FC = () => {
   const { currentRole, showToast } = useApp();
   const [activeTab, setActiveTab] = useState<'GARMENTS' | 'SERVICES' | 'SUB_SERVICES' | 'DEFECTS'>('GARMENTS');
+
+  // Top-up services / sub-services rates
+  const [topUpRates, setTopUpRates] = useState<Record<string, number>>(() => {
+    try {
+      const saved = localStorage.getItem('trendera_topup_rates');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return {
+      ST: 50,
+      SP: 50,
+      ALT: 40
+    };
+  });
+
+  const handleSaveSubServiceRates = () => {
+    if (currentRole !== 'ADMIN') {
+      showToast('ANTI-FRAUD: Manager role is restricted from altering master catalog rates.', 'error');
+      return;
+    }
+    try {
+      localStorage.setItem('trendera_topup_rates', JSON.stringify(topUpRates));
+      window.dispatchEvent(new Event('trendera_topup_rates_updated'));
+      showToast('Sub-services & top-up rates updated successfully!', 'success');
+    } catch (e) {
+      showToast('Failed to save top-up rates', 'error');
+    }
+  };
   
   // Safely load initial garments with localStorage persistence
   const [garments, setGarments] = useState<GarmentMaster[]>(() => {
@@ -109,6 +138,22 @@ export const MasterDataScreen: React.FC = () => {
   const [editName, setEditName] = useState('');
   const [editItemCode, setEditItemCode] = useState('');
   const [editPrice, setEditPrice] = useState('120');
+
+  // PDF Import Modal State
+  const [isPdfImportOpen, setIsPdfImportOpen] = useState(false);
+
+  const handleImportFromPdfComplete = (
+    updatedGarmentsList: GarmentMaster[],
+    updatedCount: number,
+    newCount: number
+  ) => {
+    saveGarmentsToStorage(updatedGarmentsList);
+    setActiveTab('GARMENTS');
+    showToast(
+      `Catalog updated from PDF: ${newCount} new items added, ${updatedCount} existing item prices updated.`,
+      'success'
+    );
+  };
 
   const filteredGarments = garments.filter(g => {
     const q = searchQuery.toLowerCase().trim();
@@ -271,13 +316,25 @@ export const MasterDataScreen: React.FC = () => {
         </div>
 
         {currentRole === 'ADMIN' && (
-          <button
-            onClick={() => setIsAddGarmentOpen(true)}
-            className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded font-bold text-xs flex items-center gap-1.5 shadow-xs transition active:scale-95"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Add Master Garment</span>
-          </button>
+          <div className="flex items-center gap-2.5">
+            <button
+              id="btn-import-from-pdf"
+              onClick={() => setIsPdfImportOpen(true)}
+              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-bold text-xs flex items-center gap-1.5 shadow-xs transition active:scale-95 cursor-pointer"
+            >
+              <FileText className="w-4 h-4" />
+              <span>Import from PDF</span>
+            </button>
+
+            <button
+              id="btn-add-master-garment"
+              onClick={() => setIsAddGarmentOpen(true)}
+              className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded font-bold text-xs flex items-center gap-1.5 shadow-xs transition active:scale-95"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Master Garment</span>
+            </button>
+          </div>
         )}
       </div>
 
@@ -479,24 +536,84 @@ export const MasterDataScreen: React.FC = () => {
           )}
 
           {activeTab === 'SUB_SERVICES' && (
-            <div className="p-4 space-y-3 overflow-y-auto text-xs">
+            <div className="p-4 space-y-4 overflow-y-auto text-xs">
+              <div className="flex items-center justify-between bg-slate-50 p-3 rounded-lg border border-slate-200">
+                <div>
+                  <div className="font-bold text-slate-800 text-sm">Default Sub-Services & Top-Up Rates</div>
+                  <div className="text-[11px] text-slate-500">Edit base rates applied when adding top-up services in POS intake.</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSaveSubServiceRates}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold flex items-center gap-1.5 shadow-sm transition"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>Save Top-Up Rates</span>
+                </button>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="p-3 border border-purple-200 bg-purple-50/50 rounded-lg">
-                  <div className="font-bold text-purple-900">Starch & Crisp Finishing (ST)</div>
-                  <div className="text-[11px] text-slate-600 mt-1">Standard premium starching for cotton shirts and kurtas.</div>
-                  <div className="mt-2 font-mono font-bold text-purple-900">Rate: +₹50.00 / pc</div>
+                <div className="p-3 border border-purple-200 bg-purple-50/50 rounded-lg flex flex-col justify-between">
+                  <div>
+                    <div className="font-bold text-purple-900 text-sm">Starch & Crisp Finishing (ST)</div>
+                    <div className="text-[11px] text-slate-600 mt-1">Standard premium starching for cotton shirts and kurtas.</div>
+                  </div>
+                  <div className="mt-3 pt-2 border-t border-purple-200/60 flex items-center justify-between">
+                    <span className="font-semibold text-purple-900">Rate / pc:</span>
+                    <div className="flex items-center gap-1 bg-white border border-purple-300 rounded px-2 py-1">
+                      <span className="font-bold text-slate-400">₹</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={topUpRates.ST ?? 50}
+                        onChange={(e) => setTopUpRates({ ...topUpRates, ST: Math.max(0, parseFloat(e.target.value) || 0) })}
+                        className="w-16 text-right font-mono font-bold text-purple-900 outline-none"
+                      />
+                    </div>
+                  </div>
                 </div>
 
-                <div className="p-3 border border-orange-200 bg-orange-50/50 rounded-lg">
-                  <div className="font-bold text-orange-900">Steam Press & Ironing (SP)</div>
-                  <div className="text-[11px] text-slate-600 mt-1">High-pressure vacuum steam finish.</div>
-                  <div className="mt-2 font-mono font-bold text-orange-900">Rate: +₹50.00 / pc</div>
+                <div className="p-3 border border-orange-200 bg-orange-50/50 rounded-lg flex flex-col justify-between">
+                  <div>
+                    <div className="font-bold text-orange-900 text-sm">Steam Press & Ironing (SP)</div>
+                    <div className="text-[11px] text-slate-600 mt-1">High-pressure vacuum steam finish.</div>
+                  </div>
+                  <div className="mt-3 pt-2 border-t border-orange-200/60 flex items-center justify-between">
+                    <span className="font-semibold text-orange-900">Rate / pc:</span>
+                    <div className="flex items-center gap-1 bg-white border border-orange-300 rounded px-2 py-1">
+                      <span className="font-bold text-slate-400">₹</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={topUpRates.SP ?? 50}
+                        onChange={(e) => setTopUpRates({ ...topUpRates, SP: Math.max(0, parseFloat(e.target.value) || 0) })}
+                        className="w-16 text-right font-mono font-bold text-orange-900 outline-none"
+                      />
+                    </div>
+                  </div>
                 </div>
 
-                <div className="p-3 border border-rose-200 bg-rose-50/50 rounded-lg">
-                  <div className="font-bold text-rose-900">Alteration & Minor Stitching (ALT)</div>
-                  <div className="text-[11px] text-slate-600 mt-1">Hem repair, button stitching, seam adjustment.</div>
-                  <div className="mt-2 font-mono font-bold text-rose-900">Rate: +₹40.00 / pc</div>
+                <div className="p-3 border border-rose-200 bg-rose-50/50 rounded-lg flex flex-col justify-between">
+                  <div>
+                    <div className="font-bold text-rose-900 text-sm">Alteration & Minor Stitching (ALT)</div>
+                    <div className="text-[11px] text-slate-600 mt-1">Hem repair, button stitching, seam adjustment.</div>
+                  </div>
+                  <div className="mt-3 pt-2 border-t border-rose-200/60 flex items-center justify-between">
+                    <span className="font-semibold text-rose-900">Rate / pc:</span>
+                    <div className="flex items-center gap-1 bg-white border border-rose-300 rounded px-2 py-1">
+                      <span className="font-bold text-slate-400">₹</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={topUpRates.ALT ?? 40}
+                        onChange={(e) => setTopUpRates({ ...topUpRates, ALT: Math.max(0, parseFloat(e.target.value) || 0) })}
+                        className="w-16 text-right font-mono font-bold text-rose-900 outline-none"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -768,6 +885,15 @@ export const MasterDataScreen: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* PDF Price-List Auto-Import Modal */}
+      <PdfPriceListImportModal
+        isOpen={isPdfImportOpen}
+        onClose={() => setIsPdfImportOpen(false)}
+        existingGarments={garments}
+        onImportComplete={handleImportFromPdfComplete}
+        showToast={showToast}
+      />
     </div>
   );
 };

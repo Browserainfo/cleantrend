@@ -64,6 +64,23 @@ export function detectPortalRequest(): { isPortalRequest: boolean; queryParam: s
   const hash = window.location.hash;
 
   const searchParams = new URLSearchParams(search);
+  
+  // 1. Explicit priority check for Reciept / Receipt / invoice parameter
+  const directParam = 
+    searchParams.get('Reciept') || 
+    searchParams.get('receipt') || 
+    searchParams.get('Receipt') || 
+    searchParams.get('reciept') ||
+    searchParams.get('invoice') ||
+    searchParams.get('Invoice') ||
+    searchParams.get('order') ||
+    searchParams.get('id') ||
+    searchParams.get('ref');
+
+  if (directParam && directParam.trim()) {
+    return { isPortalRequest: true, queryParam: directParam.trim() };
+  }
+
   const paramKeys = ['reciept', 'receipt', 'invoice', 'order', 'ordernumber', 'orderid', 'ord', 'id', 'bill', 'ref'];
 
   for (const key of paramKeys) {
@@ -102,6 +119,18 @@ export function detectPortalRequest(): { isPortalRequest: boolean; queryParam: s
     const qIndex = hash.indexOf('?');
     if (qIndex !== -1) {
       const hashParams = new URLSearchParams(hash.substring(qIndex));
+      const directHash = 
+        hashParams.get('Reciept') || 
+        hashParams.get('receipt') || 
+        hashParams.get('Receipt') || 
+        hashParams.get('reciept') ||
+        hashParams.get('invoice') ||
+        hashParams.get('order');
+
+      if (directHash && directHash.trim()) {
+        return { isPortalRequest: true, queryParam: directHash.trim() };
+      }
+
       for (const key of paramKeys) {
         for (const [k, v] of hashParams.entries()) {
           if (k.toLowerCase() === key && v && v.trim()) {
@@ -112,7 +141,7 @@ export function detectPortalRequest(): { isPortalRequest: boolean; queryParam: s
     }
 
     const hashLower = hash.toLowerCase();
-    if (hashLower.includes('/portal') || hashLower.includes('/invoice') || hashLower.includes('reciept')) {
+    if (hashLower.includes('/portal') || hashLower.includes('/invoice') || hashLower.includes('reciept') || hashLower.includes('receipt')) {
       return { isPortalRequest: true, queryParam: '' };
     }
   }
@@ -222,12 +251,20 @@ export async function fetchInvoiceFromServer(receiptQuery: string): Promise<{ or
       }
     }
 
-    // Try secondary endpoint with query param
+    // Try secondary endpoint with query param (supporting Reciept and Receipt)
     const res2 = await fetch(`/api/invoice?Reciept=${encoded}`);
     if (res2.ok) {
       const data2 = await res2.json();
       if (data2.success && data2.order) {
         return { order: data2.order, settings: data2.settings };
+      }
+    }
+
+    const res3 = await fetch(`/api/invoice?Receipt=${encoded}`);
+    if (res3.ok) {
+      const data3 = await res3.json();
+      if (data3.success && data3.order) {
+        return { order: data3.order, settings: data3.settings };
       }
     }
   } catch (err) {
