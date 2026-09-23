@@ -62,8 +62,18 @@ export const PublicInvoicePortalPage: React.FC<PublicInvoicePortalPageProps> = (
   const [isSubmittingUtr, setIsSubmittingUtr] = useState<boolean>(false);
   const [utrSubmittedSuccess, setUtrSubmittedSuccess] = useState<string | null>(null);
 
-  const effectiveUpiId = activeSettings.upiId || '9041590866@hdfc';
-  const effectivePayeeName = activeSettings.upiPayeeName || 'PRITPAL SINGH';
+  const effectiveUpiId = activeSettings.upiId || 'smarthub.2988354@hdfcbank';
+  const effectivePayeeName = activeSettings.upiPayeeName || 'Trendera Dry Cleaning';
+
+  // Compute reliable balance due ensuring carry-forward dues are clearly visible
+  const rawDiff = currentOrder 
+    ? Math.max(0, Number(((currentOrder.netAmount ?? 0) - (currentOrder.advancePaid ?? 0)).toFixed(2)))
+    : 0;
+  const isExplicitlyWaived = currentOrder?.differenceAction === 'WAIVE';
+  const isCarriedForward = currentOrder?.differenceAction === 'CARRY_FORWARD' || (Boolean(currentOrder && (currentOrder.advancePaid ?? 0) > 0 && rawDiff > 0 && (currentOrder.balanceDue ?? 0) === 0 && !isExplicitlyWaived));
+  const effectiveBalanceDue = isExplicitlyWaived 
+    ? 0 
+    : (currentOrder && (currentOrder.balanceDue ?? 0) > 0 ? (currentOrder.balanceDue ?? 0) : rawDiff);
 
   // Ensure browser title & Open Graph metadata match requested public invoice branding
   useEffect(() => {
@@ -90,15 +100,15 @@ export const PublicInvoicePortalPage: React.FC<PublicInvoicePortalPageProps> = (
 
   // Dynamically generate standards-compliant UPI QR for the current order
   useEffect(() => {
-    if (currentOrder && currentOrder.balanceDue > 0) {
-      generateOrderUpiQr(currentOrder, activeSettings).then(res => {
+    if (currentOrder && effectiveBalanceDue > 0) {
+      generateOrderUpiQr({ ...currentOrder, balanceDue: effectiveBalanceDue }, activeSettings).then(res => {
         setDynamicQrUrl(res.qrDataUrl);
         setUpiPayUri(res.upiUri);
       }).catch(err => {
         console.warn('Could not generate dynamic portal QR:', err);
       });
     }
-  }, [currentOrder, activeSettings]);
+  }, [currentOrder, activeSettings, effectiveBalanceDue]);
 
   // Load from backend server database if not found immediately in context
   useEffect(() => {
@@ -290,7 +300,7 @@ export const PublicInvoicePortalPage: React.FC<PublicInvoicePortalPageProps> = (
     );
   }
 
-  const effectiveUpiUri = upiPayUri || `upi://pay?pa=${effectiveUpiId}&pn=${encodeURIComponent(effectivePayeeName)}&am=${currentOrder.balanceDue.toFixed(2)}&cu=INR&tn=${encodeURIComponent(`Trendera Order ${currentOrder.orderNumber}`)}&tr=ORD-${currentOrder.orderNumber}`;
+  const effectiveUpiUri = upiPayUri || (currentOrder ? `upi://pay?pa=${effectiveUpiId}&pn=${encodeURIComponent(effectivePayeeName)}&am=${effectiveBalanceDue.toFixed(2)}&cu=INR&tn=${encodeURIComponent(`Trendera Order ${currentOrder.orderNumber}`)}&tr=ORD-${currentOrder.orderNumber}` : '');
 
   // 3. Render Verified Public Invoice
   return (
@@ -315,7 +325,7 @@ export const PublicInvoicePortalPage: React.FC<PublicInvoicePortalPageProps> = (
         <div className="flex items-center gap-3">
           <button
             onClick={() => {
-              printThermalBookingReceipt(currentOrder, activeSettings);
+              printThermalBookingReceipt({ ...currentOrder, balanceDue: effectiveBalanceDue }, activeSettings);
               showToast('Opening thermal print dialog...', 'info');
             }}
             className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold border border-slate-700 transition cursor-pointer"
@@ -342,10 +352,15 @@ export const PublicInvoicePortalPage: React.FC<PublicInvoicePortalPageProps> = (
         <div className="bg-[#5ea500] text-white px-4 sm:px-6 py-3 rounded-xl flex flex-wrap items-center justify-between shadow-md gap-2">
           <div className="flex items-center gap-2">
             <span className="font-bold text-xs sm:text-sm uppercase tracking-wide opacity-90">Current Due Amount :</span>
-            <span className="font-mono text-xl sm:text-2xl font-black">₹{(currentOrder.balanceDue ?? 0).toFixed(2)}</span>
+            <span className="font-mono text-xl sm:text-2xl font-black">₹{effectiveBalanceDue.toFixed(2)}</span>
+            {isCarriedForward && effectiveBalanceDue > 0 && (
+              <span className="text-[11px] bg-black/20 text-white font-semibold px-2 py-0.5 rounded-full">
+                Carried Forward
+              </span>
+            )}
           </div>
 
-          {currentOrder.balanceDue > 0 ? (
+          {effectiveBalanceDue > 0 ? (
             <button
               id="public-portal-pay-now-btn"
               onClick={handleOpenPaymentFlow}
@@ -364,7 +379,7 @@ export const PublicInvoicePortalPage: React.FC<PublicInvoicePortalPageProps> = (
         </div>
 
         {/* SUBMITTED UTR NOTICE BANNER (IF PENDING VERIFICATION) */}
-        {(currentOrder.submittedUpiRef || utrSubmittedSuccess) && currentOrder.balanceDue > 0 && (
+        {(currentOrder.submittedUpiRef || utrSubmittedSuccess) && effectiveBalanceDue > 0 && (
           <div className="bg-sky-50 border border-sky-300 p-3.5 rounded-xl flex items-start gap-3 shadow-xs">
             <div className="w-8 h-8 rounded-full bg-sky-100 border border-sky-300 flex items-center justify-center shrink-0 text-sky-700 mt-0.5">
               <Clock className="w-4 h-4" />
@@ -377,7 +392,7 @@ export const PublicInvoicePortalPage: React.FC<PublicInvoicePortalPageProps> = (
                 </span>
               </div>
               <p className="text-sky-800">
-                Our store manager (<strong>{effectivePayeeName}</strong>) will verify this credit in the bank statement and update your bill status. Thank you for your payment!
+                Our store manager will verify this credit in the Trendera business bank statement (<strong>{effectivePayeeName}</strong>) and update your bill status. Thank you for your payment!
               </p>
             </div>
           </div>
@@ -535,15 +550,30 @@ export const PublicInvoicePortalPage: React.FC<PublicInvoicePortalPageProps> = (
                 <span className="font-mono font-bold text-emerald-700">₹{(currentOrder.advancePaid ?? 0).toFixed(2)}</span>
               </div>
 
+              {isExplicitlyWaived && (
+                <div className="flex justify-between text-emerald-700 text-xs font-semibold">
+                  <span>Waiver / Discount:</span>
+                  <span className="font-mono font-bold">-₹{(currentOrder.differenceAmount || rawDiff).toFixed(2)}</span>
+                </div>
+              )}
+
               <div className="flex justify-between text-rose-700 font-black text-sm sm:text-base border-t-2 border-slate-300 pt-2">
                 <span>Balance Due:</span>
-                <span className="font-mono text-lg font-black text-rose-600">₹{(currentOrder.balanceDue ?? 0).toFixed(2)}</span>
+                <span className={`font-mono text-lg font-black ${effectiveBalanceDue > 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
+                  ₹{effectiveBalanceDue.toFixed(2)}
+                </span>
               </div>
+
+              {isCarriedForward && effectiveBalanceDue > 0 && (
+                <div className="text-[11px] font-semibold text-blue-800 bg-blue-50 border border-blue-200 rounded px-2.5 py-1 text-right mt-1.5">
+                  ℹ Balance of ₹{effectiveBalanceDue.toFixed(2)} carried forward to customer account (payable via UPI or on next order)
+                </div>
+              )}
             </div>
           </div>
 
           {/* ON-PAGE UPI PAYMENT SCANNER SECTION */}
-          {currentOrder.balanceDue > 0 && (
+          {effectiveBalanceDue > 0 && (
             <div id="upi-payment-section" className="pt-6 border-t-2 border-emerald-200">
               <div className="bg-gradient-to-br from-emerald-50 via-white to-teal-50 rounded-2xl border-2 border-emerald-300 p-4 sm:p-6 shadow-sm space-y-5">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-emerald-200 pb-3">
@@ -557,7 +587,7 @@ export const PublicInvoicePortalPage: React.FC<PublicInvoicePortalPageProps> = (
                     </p>
                   </div>
                   <div className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg font-mono font-black text-sm shadow-xs">
-                    Payable: ₹{currentOrder.balanceDue.toFixed(2)}
+                    Payable: ₹{effectiveBalanceDue.toFixed(2)}
                   </div>
                 </div>
 
@@ -606,7 +636,7 @@ export const PublicInvoicePortalPage: React.FC<PublicInvoicePortalPageProps> = (
                     </div>
                   </div>
 
-                  {/* Right: Pritpal's UPI Details & Instructions */}
+                  {/* Right: Trendera's UPI Details & Instructions */}
                   <div className="space-y-4">
                     <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2">
                       <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
@@ -624,7 +654,7 @@ export const PublicInvoicePortalPage: React.FC<PublicInvoicePortalPageProps> = (
 
                       {/* UPI ID with One-Click Copy */}
                       <div className="pt-2">
-                        <label className="block text-[11px] font-bold text-slate-700 mb-1">Pritpal's UPI ID:</label>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">Business UPI ID:</label>
                         <div className="flex items-center gap-1.5">
                           <input
                             type="text"
@@ -674,7 +704,7 @@ export const PublicInvoicePortalPage: React.FC<PublicInvoicePortalPageProps> = (
                         </button>
                       </div>
                       <p className="text-[10px] text-slate-500 leading-tight">
-                        Enter the 12-digit reference number from Google Pay, PhonePe, or Paytm receipt to notify store manager Pritpal Singh for instant verification.
+                        Enter the 12-digit reference number from Google Pay, PhonePe, or Paytm receipt to notify store management for instant bank credit verification.
                       </p>
                     </form>
                   </div>
@@ -696,13 +726,13 @@ export const PublicInvoicePortalPage: React.FC<PublicInvoicePortalPageProps> = (
               <span>Print Thermal Receipt</span>
             </button>
 
-            {currentOrder.balanceDue > 0 && (
+            {effectiveBalanceDue > 0 && (
               <button
                 onClick={handleOpenPaymentFlow}
                 className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-extrabold text-xs sm:text-sm flex items-center gap-2 transition cursor-pointer shadow-md"
               >
                 <QrCode className="w-4 h-4" />
-                <span>Pay Balance (₹{(currentOrder.balanceDue ?? 0).toFixed(2)})</span>
+                <span>Pay Balance (₹{effectiveBalanceDue.toFixed(2)})</span>
               </button>
             )}
           </div>
@@ -710,7 +740,7 @@ export const PublicInvoicePortalPage: React.FC<PublicInvoicePortalPageProps> = (
       </main>
 
       {/* UPI PAYMENT & SCANNER MODAL POPUP */}
-      {isPayNowModalOpen && currentOrder.balanceDue > 0 && (
+      {isPayNowModalOpen && effectiveBalanceDue > 0 && (
         <div className="fixed inset-0 bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 z-50 animate-in fade-in overflow-y-auto">
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-5 sm:p-6 border border-slate-300 space-y-4 my-auto">
             {/* Modal Header */}
@@ -739,7 +769,7 @@ export const PublicInvoicePortalPage: React.FC<PublicInvoicePortalPageProps> = (
                 <span className="text-[11px] text-emerald-700">Customer: {currentOrder.customerName}</span>
               </div>
               <span className="font-mono text-2xl font-black text-emerald-800">
-                ₹{(currentOrder.balanceDue ?? 0).toFixed(2)}
+                ₹{effectiveBalanceDue.toFixed(2)}
               </span>
             </div>
 
@@ -753,7 +783,7 @@ export const PublicInvoicePortalPage: React.FC<PublicInvoicePortalPageProps> = (
                 <span>⚡ Open UPI App (GPay / PhonePe / Paytm)</span>
               </a>
               <div className="text-center text-[10px] text-slate-500 mt-1">
-                Tapping opens your phone's UPI app with ₹{(currentOrder.balanceDue ?? 0).toFixed(2)} prefilled
+                Tapping opens your phone's UPI app with ₹{effectiveBalanceDue.toFixed(2)} prefilled
               </div>
             </div>
 
@@ -796,7 +826,7 @@ export const PublicInvoicePortalPage: React.FC<PublicInvoicePortalPageProps> = (
               </div>
             </div>
 
-            {/* Pritpal's UPI ID Box with One-Click Copy */}
+            {/* Trendera's Business UPI ID Box with One-Click Copy */}
             <div className="bg-slate-100 p-3 rounded-xl border border-slate-200 space-y-1 text-xs">
               <div className="flex justify-between items-center text-[11px] text-slate-500 font-semibold">
                 <span>Payee: <strong>{effectivePayeeName}</strong></span>
@@ -844,7 +874,7 @@ export const PublicInvoicePortalPage: React.FC<PublicInvoicePortalPageProps> = (
                 </button>
               </div>
               <p className="text-[10px] text-slate-500">
-                Store manager Pritpal Singh will verify the credit in the bank statement and update your bill.
+                Store manager will verify the credit in the Trendera business bank account statement and update your bill.
               </p>
             </form>
 

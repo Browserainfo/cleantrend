@@ -216,8 +216,8 @@ export interface BusinessSettings {
   onlinePortalDomain: string; // "https://cleanera.app"
   defaultDueDays: number; // 4 days
   paymentQrUrl?: string; // e.g. "/payment-qr.jpg" or full URL or data URI
-  upiId?: string; // e.g. "9041590866@hdfc"
-  upiPayeeName?: string; // e.g. "PRITPAL SINGH"
+  upiId?: string; // e.g. "smarthub.2988354@hdfcbank"
+  upiPayeeName?: string; // e.g. "Trendera Dry Cleaning"
   includeQrInWhatsApp?: boolean; // whether to automatically append payment QR scanner
 }
 

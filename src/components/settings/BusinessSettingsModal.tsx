@@ -187,12 +187,12 @@ export const BusinessSettingsModal: React.FC<{ isOpen: boolean; onClose: () => v
     try {
       const upiUri = buildUpiPaymentUri({
         upiId,
-        payeeName: formData.upiPayeeName || formData.businessName || 'PRITPAL SINGH',
+        payeeName: formData.upiPayeeName || formData.businessName || 'Trendera Dry Cleaning',
         note: `${formData.businessName || 'Trendera'} Dry Cleaners`
       });
       const dataUrl = await renderBrandedPaymentCardDataUrl({
         upiUri,
-        payeeName: formData.upiPayeeName || formData.businessName || 'PRITPAL SINGH',
+        payeeName: formData.upiPayeeName || formData.businessName || 'Trendera Dry Cleaning',
         upiId,
         businessName: formData.businessName || 'Trendera Dry Cleaners'
       });
@@ -672,7 +672,7 @@ export const BusinessSettingsModal: React.FC<{ isOpen: boolean; onClose: () => v
                           disabled={isManager}
                           value={formData.upiId || ''}
                           onChange={(e) => handleInputChange('upiId', e.target.value)}
-                          placeholder="e.g. 9041590866@hdfc"
+                          placeholder="e.g. smarthub.2988354@hdfcbank"
                           className="w-full p-1.5 border border-slate-300 rounded font-mono text-xs text-slate-900 disabled:bg-slate-100"
                         />
                       </div>
@@ -686,7 +686,7 @@ export const BusinessSettingsModal: React.FC<{ isOpen: boolean; onClose: () => v
                           disabled={isManager}
                           value={formData.upiPayeeName || ''}
                           onChange={(e) => handleInputChange('upiPayeeName', e.target.value)}
-                          placeholder="e.g. PRITPAL SINGH"
+                          placeholder="e.g. Trendera Dry Cleaning"
                           className="w-full p-1.5 border border-slate-300 rounded text-xs text-slate-900 disabled:bg-slate-100"
                         />
                       </div>

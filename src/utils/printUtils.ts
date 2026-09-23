@@ -292,10 +292,30 @@ export const printThermalBookingReceipt = (
           <span>Advance Paid:</span>
           <span>Rs. ${order.advancePaid.toFixed(2)}</span>
         </div>
-        <div style="display: flex; justify-content: space-between; border-top: 2px solid #000; padding-top: 4px; font-size: 13px; font-weight: 900;">
-          <span>Balance Due:</span>
-          <span>Rs. ${order.balanceDue.toFixed(2)}</span>
-        </div>
+        ${(() => {
+          const rawDiff = Math.max(0, Number(((order.netAmount ?? 0) - (order.advancePaid ?? 0)).toFixed(2)));
+          const isExplicitlyWaived = (order as any).differenceAction === 'WAIVE';
+          const isCarriedForward = (order as any).differenceAction === 'CARRY_FORWARD' || (order.advancePaid > 0 && rawDiff > 0 && (order.balanceDue ?? 0) === 0 && !isExplicitlyWaived);
+          const effectiveBalance = isExplicitlyWaived ? 0 : ((order.balanceDue && order.balanceDue > 0) ? order.balanceDue : rawDiff);
+
+          return `
+            ${isExplicitlyWaived ? `
+              <div style="display: flex; justify-content: space-between; font-size: 10px;">
+                <span>Difference Waived / Settled:</span>
+                <span>-Rs. ${((order as any).differenceAmount || rawDiff).toFixed(2)}</span>
+              </div>
+            ` : ''}
+            <div style="display: flex; justify-content: space-between; border-top: 2px solid #000; padding-top: 4px; font-size: 13px; font-weight: 900;">
+              <span>Balance Due:</span>
+              <span>Rs. ${effectiveBalance.toFixed(2)}</span>
+            </div>
+            ${isCarriedForward && effectiveBalance > 0 ? `
+              <div style="font-size: 9.5px; color: #444; text-align: right; padding-top: 1px;">
+                * Balance carried forward to next order / account
+              </div>
+            ` : ''}
+          `;
+        })()}
       </div>
 
       <!-- QR Code & Barcode Representation -->

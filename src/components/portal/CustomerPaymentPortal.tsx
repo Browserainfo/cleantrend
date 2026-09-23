@@ -41,8 +41,8 @@ export const CustomerPaymentPortal: React.FC<{ isOpen: boolean; onClose: () => v
   const [isSubmittingUtr, setIsSubmittingUtr] = useState<boolean>(false);
   const [utrSubmitted, setUtrSubmitted] = useState<string | null>(null);
 
-  const effectiveUpiId = businessSettings.upiId || '9041590866@hdfc';
-  const effectivePayeeName = businessSettings.upiPayeeName || 'PRITPAL SINGH';
+  const effectiveUpiId = businessSettings.upiId || 'smarthub.2988354@hdfcbank';
+  const effectivePayeeName = businessSettings.upiPayeeName || 'Trendera Dry Cleaning';
 
   useEffect(() => {
     if (order && order.balanceDue > 0) {

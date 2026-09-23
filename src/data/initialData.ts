@@ -41,8 +41,8 @@ export const initialBusinessSettings: BusinessSettings = {
   onlinePortalDomain: 'https://cleanera.app',
   defaultDueDays: 4,
   paymentQrUrl: '/payment-qr.jpg',
-  upiId: '9041590866@hdfc',
-  upiPayeeName: 'PRITPAL SINGH',
+  upiId: 'smarthub.2988354@hdfcbank',
+  upiPayeeName: 'Trendera Dry Cleaning',
   includeQrInWhatsApp: false
 };
 

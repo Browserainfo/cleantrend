@@ -318,10 +318,36 @@ export const ThermalReceiptModal: React.FC<{ isOpen: boolean; onClose: () => voi
                 <span>Advance Paid:</span>
                 <span>{(Number(order.advancePaid) || 0).toFixed(2)}</span>
               </div>
-              <div className="flex justify-between font-black text-xs text-slate-950 border-t border-slate-800 pt-1">
-                <span>Balance Due:</span>
-                <span>Rs. {(Number(order.balanceDue) || 0).toFixed(2)}</span>
-              </div>
+              {(() => {
+                const net = Number(order.netAmount || 0);
+                const adv = Number(order.advancePaid || 0);
+                const rawDiff = Math.max(0, Number((net - adv).toFixed(2)));
+                const isExplicitlyWaived = (order as any).differenceAction === 'WAIVE';
+                const isCarriedForward = (order as any).differenceAction === 'CARRY_FORWARD';
+                const effectiveBalance = isExplicitlyWaived ? 0 : ((order.balanceDue && order.balanceDue > 0) ? order.balanceDue : rawDiff);
+
+                return (
+                  <>
+                    {isExplicitlyWaived && (
+                      <div className="flex justify-between text-emerald-700 font-semibold text-[9.5px]">
+                        <span>Waived / Settled:</span>
+                        <span>-Rs. {((order as any).differenceAmount || rawDiff).toFixed(2)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between font-black text-xs text-slate-950 border-t border-slate-800 pt-1">
+                      <span>Balance Due:</span>
+                      <span className={effectiveBalance > 0 ? 'text-rose-700' : 'text-slate-950'}>
+                        Rs. {effectiveBalance.toFixed(2)}
+                      </span>
+                    </div>
+                    {isCarriedForward && effectiveBalance > 0 && (
+                      <div className="text-[9px] text-blue-700 font-semibold text-right pt-0.5">
+                        * Carried forward to customer next order
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
 
             {/* Scannable Barcode & QR footer */}

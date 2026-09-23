@@ -18,7 +18,8 @@ import {
   Check, 
   Plus,
   FileSpreadsheet,
-  Download
+  Download,
+  ExternalLink
 } from 'lucide-react';
 import { Customer, Order } from '../../types';
 import { normalizeIndianPhoneNumber, formatIndianPhoneNumberDisplay } from '../../utils/phoneUtils';
@@ -36,7 +37,8 @@ export const CustomerScreen: React.FC = () => {
     setActiveCustomerId,
     setWhatsAppSimulatorOpen, 
     showToast,
-    businessSettings 
+    businessSettings,
+    resendPaymentLink
   } = useApp();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -333,6 +335,18 @@ export const CustomerScreen: React.FC = () => {
     showToast(`Starting new POS booking for customer ${cust.name} (${cust.mobile})`, 'info');
   };
 
+  const handleResendCustomerPaymentLink = (cust: Customer) => {
+    if (!cust) return;
+    const custOrders = ordersByCustomerId.get(cust.id) || [];
+    // Prioritize an order with balanceDue > 0, or the most recent order
+    const targetOrder = custOrders.find(o => o.balanceDue > 0) || custOrders[0];
+    if (!targetOrder) {
+      showToast(`No orders found for customer ${cust.name} to send payment link.`, 'warning');
+      return;
+    }
+    resendPaymentLink(targetOrder.id);
+  };
+
   const handleExportToExcel = () => {
     try {
       if (!customers || customers.length === 0) {
@@ -540,6 +554,16 @@ export const CustomerScreen: React.FC = () => {
               {/* Action Buttons */}
               <div className="flex items-center gap-2">
                 <button
+                  id="btn-customer-resend-payment-link"
+                  onClick={() => handleResendCustomerPaymentLink(selectedCustomer)}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs font-bold flex items-center gap-1.5 shadow-xs transition"
+                  title="Open WhatsApp with payment link for pending order"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Resend Payment Link</span>
+                </button>
+
+                <button
                   onClick={() => handleOpenEditCustomer(selectedCustomer)}
                   className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-xs font-bold flex items-center gap-1.5 border border-slate-300 transition"
                   title="Edit customer profile information"
@@ -586,6 +610,16 @@ export const CustomerScreen: React.FC = () => {
                 <div className={`text-base font-bold ${customerSummary.balanceDue > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
                   ₹{customerSummary.balanceDue.toFixed(2)}
                 </div>
+                {customerSummary.balanceDue > 0 && (
+                  <button
+                    onClick={() => handleResendCustomerPaymentLink(selectedCustomer)}
+                    className="mt-0.5 text-[10px] text-emerald-700 hover:text-emerald-800 font-bold inline-flex items-center gap-0.5 hover:underline cursor-pointer"
+                    title="Send WhatsApp payment link for pending balance"
+                  >
+                    <ExternalLink className="w-2.5 h-2.5" />
+                    <span>Send Payment Link</span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -672,6 +706,14 @@ export const CustomerScreen: React.FC = () => {
                             )}
                           </td>
                           <td className="p-2.5 text-right whitespace-nowrap space-x-1.5">
+                            <button
+                              onClick={() => resendPaymentLink(order.id)}
+                              className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded font-semibold text-[11px] transition inline-flex items-center gap-1 shadow-2xs"
+                              title={`Open WhatsApp payment link for Order #${order.orderNumber}`}
+                            >
+                              <ExternalLink className="w-3 h-3 text-emerald-600" />
+                              <span>Payment Link</span>
+                            </button>
                             <button
                               onClick={() => {
                                 setActiveOrderId(order.id);

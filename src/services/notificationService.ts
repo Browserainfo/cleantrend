@@ -135,6 +135,51 @@ export function buildOrderWhatsAppMessage(
 }
 
 /**
+ * Builds the WhatsApp message specifically for resending the Payment Link.
+ * Includes Order number, amount, balance due, and the online invoice/payment URL.
+ */
+export function buildPaymentLinkWhatsAppMessage(
+  order: Order,
+  customer: Customer,
+  businessSettings: BusinessSettings
+): string {
+  const custName = (customer?.name || order.customerName || '').trim();
+  const orderNumber = order.orderNumber;
+  const garmentsCount = order.totalPieces || (order.items ? order.items.reduce((s, i) => s + (i.quantity || 1), 0) : 1);
+  const totalAmount = Math.round(order.netAmount || 0);
+  const balanceDue = Math.round(order.balanceDue || 0);
+  const formattedDueDate = formatWhatsAppDueDate(order.dueDate);
+  const receiptUrl = order.receiptUrl || buildPublicReceiptUrl(order, businessSettings);
+  const storeName = getEffectiveStoreName(businessSettings);
+
+  const greeting = custName && custName !== 'Customer' && custName !== 'Walk-in'
+    ? `Hi ${custName}, here is your payment link for Order #${orderNumber}.`
+    : `Hi, here is your payment link for Order #${orderNumber}.`;
+
+  const lines = [
+    storeName,
+    '',
+    greeting,
+    `Amt: Rs. ${totalAmount}`,
+    balanceDue > 0 ? `Balance Due: Rs. ${balanceDue}` : `Payment: Fully Paid`,
+    `Qty: ${garmentsCount} Pcs`,
+    `Due Date: ${formattedDueDate}`,
+    `Pay Online / View Receipt: ${receiptUrl}`,
+    '',
+    balanceDue > 0
+      ? `Please use the link above to pay securely via UPI, QR Scanner, or Net Banking.`
+      : `Thank you for your business! You can view and download your invoice using the link above.`,
+    '',
+    `Thanks,`,
+    `Team ${storeName}`,
+    '',
+    `Note: Please save our number to activate the link.`
+  ];
+
+  return lines.join('\n');
+}
+
+/**
  * Builds the dynamic Email Order Confirmation (Subject, HTML, and Text).
  */
 export function buildOrderEmailConfirmation(

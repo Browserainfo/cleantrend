@@ -427,10 +427,10 @@ export const WhatsAppSimulator: React.FC<{ isOpen: boolean; onClose: () => void 
                             />
                             <div className="mt-1.5 text-center">
                               <p className="text-[11px] font-bold text-slate-900 tracking-wide">
-                                {businessSettings.upiPayeeName || 'PRITPAL SINGH'}
+                                {businessSettings.upiPayeeName || 'Trendera Dry Cleaning'}
                               </p>
                               <p className="text-[10px] font-mono font-semibold text-slate-600">
-                                UPI ID: {businessSettings.upiId || '9041590866@hdfc'}
+                                UPI ID: {businessSettings.upiId || 'smarthub.2988354@hdfcbank'}
                               </p>
                             </div>
                           </div>

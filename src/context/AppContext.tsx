@@ -30,6 +30,7 @@ import {
 import {
   dispatchOrderNotifications,
   buildOrderWhatsAppMessage,
+  buildPaymentLinkWhatsAppMessage,
   buildOrderEmailConfirmation,
   resolveAbsoluteQrUrl
 } from '../services/notificationService';
@@ -974,8 +975,58 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const resendPaymentLink = (orderId: string) => {
-    sendWhatsAppNotification('ORDER_CREATED', orderId);
-    showToast('Payment link resent to customer WhatsApp!', 'success');
+    const order = orders.find(o => o.id === orderId);
+    if (!order) {
+      showToast('Order not found to send payment link.', 'error');
+      return;
+    }
+
+    const cust = customers.find(c => c.id === order.customerId) || {
+      id: order.customerId,
+      name: order.customerName,
+      mobile: order.customerMobile
+    } as Customer;
+
+    const rawPhone = (order.customerMobile || cust.mobile || '').trim();
+    const normalizedPhone = normalizeIndianPhoneNumber(rawPhone);
+    const cleanDigits = normalizedPhone.replace(/\D/g, '');
+
+    if (!cleanDigits || cleanDigits.length < 10) {
+      showToast(`Invalid or missing customer mobile number (${rawPhone || 'Not set'}) to open WhatsApp.`, 'error');
+      return;
+    }
+
+    // Build the formatted order details and online payment link message
+    const messageToSend = buildPaymentLinkWhatsAppMessage(order, cust, businessSettings);
+
+    // Direct WhatsApp click-to-chat URL with phone number and pre-filled payment link message
+    const waUrl = `https://api.whatsapp.com/send?phone=${cleanDigits}&text=${encodeURIComponent(messageToSend)}`;
+
+    try {
+      window.open(waUrl, '_blank', 'noopener,noreferrer');
+    } catch (e) {
+      window.location.href = waUrl;
+    }
+
+    // Record in local CRM message log for audit trail & simulator view
+    const now = new Date();
+    const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    const effectiveReceiptUrl = order.receiptUrl || buildPublicReceiptUrl(order, businessSettings);
+    const newMsg: WhatsAppMessage = {
+      id: `wa-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      toName: order.customerName,
+      toPhone: normalizedPhone,
+      triggerType: 'ORDER_CREATED',
+      messageText: messageToSend,
+      receiptUrl: effectiveReceiptUrl,
+      orderNumber: order.orderNumber,
+      timestamp: timeStr,
+      status: 'SENT',
+      isOutbound: true
+    };
+    setWhatsAppMessages(prev => [newMsg, ...prev]);
+
+    showToast(`Opening WhatsApp for Order #${order.orderNumber} with customer +${cleanDigits}...`, 'success');
   };
 
   const sendManualSMS = (phone: string, text: string) => {
@@ -1029,8 +1080,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let balance = (orderData.balanceDue !== undefined && orderData.balanceDue !== null)
       ? Number(orderData.balanceDue)
       : Math.max(0, roundedTotal - advance);
-    if (diffAction === 'WAIVE' || diffAction === 'CARRY_FORWARD') {
-      balance = 0; // Settled difference
+    if (diffAction === 'WAIVE') {
+      balance = 0; // Settled / Waived discount
+    } else if (diffAction === 'CARRY_FORWARD') {
+      balance = Math.max(0, roundedTotal - advance); // Carried forward to account & next order, still due
     }
 
     const chosenMethod = (orderData as any).advancePaymentMethod || (orderData as any).paymentMethod || 'CASH';

@@ -27,18 +27,52 @@ function getGeminiClient(): GoogleGenAI | null {
   }
   return geminiClient;
 }
-import { 
-  initialOrders, 
-  initialCustomers, 
-  initialBusinessSettings,
-  serviceDefinitions,
-  garmentCatalog,
-  initialAuditLogs,
-  initialWhatsAppMessages
-} from './src/data/initialData';
+const fallbackSettings = {
+  storeName: 'Trendera',
+  businessName: 'Trendera Dry Cleaning',
+  displayName: 'Trendera Dry Cleaning - Noida',
+  legalName: 'Trendera Services Private Limited',
+  branchName: 'C2 Sector 1 Noida',
+  branchCode: 'TE02',
+  address: 'C2, Sector 1, Block C, Noida Industrial Area',
+  city: 'Noida',
+  state: 'Uttar Pradesh',
+  country: 'India',
+  postalCode: '201301',
+  phone: '+91 7060227124',
+  email: 'support@trendera.com',
+  website: 'https://trendera.com',
+  taxNumber: '',
+  logoUrl: 'https://images.unsplash.com/photo-1545173168-9f1947eebb7f?w=160&auto=format&fit=crop&q=80',
+  faviconUrl: 'https://images.unsplash.com/photo-1545173168-9f1947eebb7f?w=48&auto=format&fit=crop&q=80',
+  marketingMessage: 'Your space for marketing or any other message.',
+  receiptFooterMessage: 'Thank You for choosing Trendera Dry Cleaning CRM. All garments are carefully inspected before processing. We are not responsible for any article left uncollected after 15 days from the due date. We are not responsible for any damage that may occur during the cleaning process.',
+  customerPortalMessage: 'Welcome to your self-service payment and tracking portal. Fast, secure, and hassle-free.',
+  termsAndConditions: '1. Garments must be collected within 15 days of ready date.\n2. In case of damage, maximum liability is 5x of dry cleaning charge.\n3. Colors without color-fastness guarantee processed at customer risk.',
+  thankYouMessage: 'We appreciate your business! Visit us again soon.',
+  currencySymbol: 'Rs.',
+  currencyCode: 'INR',
+  taxRatePercent: 0.0,
+  maskPhoneOnThermalReceipt: true,
+  enableOnlinePayment: true,
+  onlinePortalDomain: 'https://cleanera.app',
+  defaultDueDays: 4,
+  paymentQrUrl: '/payment-qr.jpg',
+  upiId: 'smarthub.2988354@hdfcbank',
+  upiPayeeName: 'Trendera Dry Cleaning',
+  includeQrInWhatsApp: false
+};
+
+const initialOrders: any[] = [];
+const initialCustomers: any[] = [];
+const initialBusinessSettings = fallbackSettings;
+const serviceDefinitions: any[] = [];
+const garmentCatalog: any[] = [];
+const initialAuditLogs: any[] = [];
+const initialWhatsAppMessages: any[] = [];
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -387,6 +421,28 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
 });
 
+// Helper to sanitize order output so carry-forward orders correctly show balance due
+function formatOrderForPublicInvoice(rawOrder: any) {
+  if (!rawOrder) return rawOrder;
+  const net = Number(rawOrder.netAmount || 0);
+  const adv = Number(rawOrder.advancePaid || 0);
+  const rawDiff = Math.max(0, Number((net - adv).toFixed(2)));
+  const isExplicitlyWaived = rawOrder.differenceAction === 'WAIVE';
+  const isCarriedForward = rawOrder.differenceAction === 'CARRY_FORWARD' || (adv > 0 && rawDiff > 0 && (rawOrder.balanceDue === 0 || !rawOrder.balanceDue) && !isExplicitlyWaived);
+
+  let effectiveBalance = Number(rawOrder.balanceDue || 0);
+  if (!isExplicitlyWaived && (isCarriedForward || effectiveBalance === 0) && rawDiff > 0) {
+    effectiveBalance = rawDiff;
+  }
+
+  return {
+    ...rawOrder,
+    balanceDue: isExplicitlyWaived ? 0 : effectiveBalance,
+    differenceAction: isCarriedForward ? 'CARRY_FORWARD' : rawOrder.differenceAction,
+    paymentStatus: (adv >= net || isExplicitlyWaived) ? 'PAID' : (adv > 0 ? 'PARTIAL' : 'PENDING')
+  };
+}
+
 // PUBLIC INVOICE LOOKUP (No auth needed, publicly accessible from WhatsApp link)
 app.get('/api/invoice/:ref', (req, res) => {
   const ref = req.params.ref;
@@ -394,9 +450,10 @@ app.get('/api/invoice/:ref', (req, res) => {
   if (!order) {
     return res.status(404).json({ success: false, error: 'Invoice not found', ref });
   }
+  const formattedOrder = formatOrderForPublicInvoice(order);
   return res.json({
     success: true,
-    order,
+    order: formattedOrder,
     settings: {
       businessName: db.settings.businessName,
       branchName: db.settings.branchName,
@@ -407,8 +464,8 @@ app.get('/api/invoice/:ref', (req, res) => {
       logoUrl: db.settings.logoUrl,
       receiptFooterMessage: db.settings.receiptFooterMessage,
       onlinePortalDomain: db.settings.onlinePortalDomain,
-      upiId: db.settings.upiId || '9041590866@hdfc',
-      upiPayeeName: db.settings.upiPayeeName || 'PRITPAL SINGH',
+      upiId: db.settings.upiId || 'smarthub.2988354@hdfcbank',
+      upiPayeeName: db.settings.upiPayeeName || 'Trendera Dry Cleaning',
       paymentQrUrl: db.settings.paymentQrUrl || '/payment-qr.jpg'
     }
   });
@@ -424,9 +481,10 @@ app.get('/api/invoice', (req, res) => {
   if (!order) {
     return res.status(404).json({ success: false, error: 'Invoice not found', ref: queryParam });
   }
+  const formattedOrder = formatOrderForPublicInvoice(order);
   return res.json({
     success: true,
-    order,
+    order: formattedOrder,
     settings: {
       businessName: db.settings.businessName,
       branchName: db.settings.branchName,
@@ -437,8 +495,8 @@ app.get('/api/invoice', (req, res) => {
       logoUrl: db.settings.logoUrl,
       receiptFooterMessage: db.settings.receiptFooterMessage,
       onlinePortalDomain: db.settings.onlinePortalDomain,
-      upiId: db.settings.upiId || '9041590866@hdfc',
-      upiPayeeName: db.settings.upiPayeeName || 'PRITPAL SINGH',
+      upiId: db.settings.upiId || 'smarthub.2988354@hdfcbank',
+      upiPayeeName: db.settings.upiPayeeName || 'Trendera Dry Cleaning',
       paymentQrUrl: db.settings.paymentQrUrl || '/payment-qr.jpg'
     }
   });
@@ -540,8 +598,8 @@ async function renderBrandedPaymentCardPng(params: {
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
 
-  const payeeName = (params.payeeName || 'PRITPAL SINGH').trim();
-  const upiId = (params.upiId || '9041590866@hdfc').trim();
+  const payeeName = (params.payeeName || 'Trendera Dry Cleaning').trim();
+  const upiId = (params.upiId || 'smarthub.2988354@hdfcbank').trim();
   const businessName = (params.businessName || 'TRENDERA DRY CLEANERS').trim();
   const amount = typeof params.amount === 'number' && params.amount > 0 ? params.amount : 0;
   const orderNumber = params.orderNumber ? String(params.orderNumber).trim() : '';
@@ -672,8 +730,8 @@ app.get('/api/payment-qr', async (req, res) => {
       : (orderNumber ? db.orders.find(o => String(o.orderNumber) === String(orderNumber)) : null);
 
     const settings = (db as any).settings || (db as any).businessSettings || {};
-    const upiId = (pa || settings.upiId || '9041590866@hdfc').trim();
-    const payeeName = (pn || settings.upiPayeeName || settings.businessName || 'PRITPAL SINGH').trim();
+    const upiId = (pa || settings.upiId || 'smarthub.2988354@hdfcbank').trim();
+    const payeeName = (pn || settings.upiPayeeName || settings.businessName || 'Trendera Dry Cleaning').trim();
     const businessName = (settings.businessName || 'TRENDERA DRY CLEANERS').trim();
 
     let amount = 0;
@@ -1026,6 +1084,15 @@ app.post('/api/orders', requireAuth, (req, res) => {
   if (!newOrder || !newOrder.id) {
     return res.status(400).json({ success: false, error: 'Invalid order data' });
   }
+
+  // Preserve balanceDue when differenceAction is CARRY_FORWARD or partial advance paid
+  if (newOrder.differenceAction === 'CARRY_FORWARD') {
+    const net = Number(newOrder.netAmount || 0);
+    const adv = Number(newOrder.advancePaid || 0);
+    newOrder.balanceDue = Math.max(0, Number((net - adv).toFixed(2)));
+    newOrder.paymentStatus = adv >= net ? 'PAID' : (adv > 0 ? 'PARTIAL' : 'PENDING');
+  }
+
   const existingIdx = db.orders.findIndex(o => o.id === newOrder.id || o.orderNumber === newOrder.orderNumber);
   if (existingIdx >= 0) {
     db.orders[existingIdx] = { ...db.orders[existingIdx], ...newOrder };
@@ -1305,12 +1372,14 @@ if (!fs.existsSync(BACKUPS_DIR)) {
   }
 }
 
-// Attempt creation of the external Windows PC backup directory
-try {
-  if (!fs.existsSync(WINDOWS_BACKUPS_DIR)) {
-    fs.mkdirSync(WINDOWS_BACKUPS_DIR, { recursive: true });
-  }
-} catch (e) {}
+// Attempt creation of external Windows backup directory only on Windows OS
+if (process.platform === 'win32') {
+  try {
+    if (!fs.existsSync(WINDOWS_BACKUPS_DIR)) {
+      fs.mkdirSync(WINDOWS_BACKUPS_DIR, { recursive: true });
+    }
+  } catch (e) {}
+}
 
 interface BackupMeta {
   lastAttempt: string;
@@ -2314,7 +2383,9 @@ async function startServer() {
     }
   };
 
-  if (process.env.NODE_ENV !== 'production') {
+  const isProd = process.env.NODE_ENV === 'production' || fs.existsSync(path.join(process.cwd(), 'dist', 'index.html'));
+
+  if (!isProd) {
     const vite = await createViteServer({
       configFile: path.resolve(process.cwd(), 'vite.config.ts'),
       server: {

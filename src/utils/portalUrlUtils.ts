@@ -1,21 +1,56 @@
 import { Order, BusinessSettings } from '../types';
 import { getBusinessPrefix } from './pieceTagUtils';
 
+export const DEFAULT_PRODUCTION_DOMAIN = 'https://crm.trenderacleaners.com';
+
+/**
+ * Returns the effective portal origin, prioritizing https://crm.trenderacleaners.com
+ * and replacing any legacy run.app or cleanera.app URLs.
+ */
+export function getEffectivePortalOrigin(businessSettings?: BusinessSettings): string {
+  if (
+    businessSettings?.onlinePortalDomain &&
+    !businessSettings.onlinePortalDomain.includes('run.app') &&
+    !businessSettings.onlinePortalDomain.includes('cleanera.app') &&
+    !businessSettings.onlinePortalDomain.includes('localhost')
+  ) {
+    return businessSettings.onlinePortalDomain.replace(/\/+$/, '');
+  }
+  return DEFAULT_PRODUCTION_DOMAIN;
+}
+
+/**
+ * Normalizes any receipt URL to ensure it uses https://crm.trenderacleaners.com
+ * instead of the old AI Studio run.app or cleanera.app domains.
+ */
+export function normalizePublicReceiptUrl(url: string | undefined, order?: Order, businessSettings?: BusinessSettings): string {
+  if (!url) {
+    return order && businessSettings ? buildPublicReceiptUrl(order, businessSettings) : '';
+  }
+  let updated = url.trim();
+  if (
+    updated.includes('.run.app') || 
+    updated.includes('cleanera.app') || 
+    updated.includes('localhost:3000') ||
+    updated.includes('localhost:5173')
+  ) {
+    try {
+      const parsed = new URL(updated);
+      const origin = getEffectivePortalOrigin(businessSettings);
+      return `${origin}${parsed.pathname}${parsed.search}`;
+    } catch {
+      return updated.replace(/https?:\/\/[^/]+/i, getEffectivePortalOrigin(businessSettings));
+    }
+  }
+  return updated;
+}
+
 /**
  * Builds the exact production public invoice / receipt link for WhatsApp and notifications.
- * Uses the production domain (e.g. https://cleanera.app or configured businessSettings.onlinePortalDomain).
+ * Uses the official domain: https://crm.trenderacleaners.com
  */
 export function buildPublicReceiptUrl(order: Order, businessSettings: BusinessSettings): string {
-  // If businessSettings specifies a valid custom domain (not unpurchased cleanera.app), use it.
-  // Otherwise default to window.location.origin so the link is immediately testable and clickable right now!
-  let origin = '';
-  if (typeof window !== 'undefined' && window.location?.origin) {
-    origin = window.location.origin;
-  } else if (businessSettings?.onlinePortalDomain && !businessSettings.onlinePortalDomain.includes('cleanera.app')) {
-    origin = businessSettings.onlinePortalDomain.replace(/\/+$/, '');
-  } else {
-    origin = 'https://cleanera.app';
-  }
+  const origin = getEffectivePortalOrigin(businessSettings);
 
   const effectivePrefix = getBusinessPrefix(businessSettings);
   const branchCode = (order.branchCode && order.branchCode !== 'DC02') 

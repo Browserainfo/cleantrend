@@ -731,7 +731,9 @@ export const DropScreen: React.FC = () => {
 
   // Advance payment difference calculation
   const advanceDiff = Math.max(0, Number((roundedTotal - advancePaid).toFixed(2)));
-  const balanceDue = (advancePaid > 0 && advanceDiff > 0 && (advanceDiffOption === 'WAIVE' || advanceDiffOption === 'CARRY_FORWARD'))
+  // When CARRY_FORWARD is chosen, the balance is still due from the customer (carried forward to account/next order)
+  // Only when explicitly WAIVED is the balance zeroed out.
+  const balanceDue = (advancePaid > 0 && advanceDiff > 0 && advanceDiffOption === 'WAIVE')
     ? 0
     : Math.max(0, roundedTotal - advancePaid);
 
@@ -801,7 +803,7 @@ export const DropScreen: React.FC = () => {
         adjustmentApplied: effectiveAdjustment > 0 ? effectiveAdjustment : undefined,
         differenceAction: effectiveDiffAction,
         differenceAmount: effectiveDiffAmount,
-        paymentStatus: (advancePaid >= roundedTotal || (advancePaid > 0 && effectiveDiffAction)) ? 'PAID' : advancePaid > 0 ? 'PARTIAL' : 'PENDING',
+        paymentStatus: (advancePaid >= roundedTotal || (advancePaid > 0 && effectiveDiffAction === 'WAIVE')) ? 'PAID' : advancePaid > 0 ? 'PARTIAL' : 'PENDING',
         advancePaymentMethod,
         workshopNotes,
         deliveryNotes,
@@ -1654,25 +1656,6 @@ export const DropScreen: React.FC = () => {
                           +
                         </button>
                       </div>
-
-                      {/* Quick Weight Presets */}
-                      <div className="pt-1 flex flex-wrap gap-1">
-                        <span className="text-[10px] text-slate-500 self-center mr-1">Presets:</span>
-                        {[1, 2, 3, 4, 5, 6, 8, 10, 15, 20].map(wt => (
-                          <button
-                            key={wt}
-                            type="button"
-                            onClick={() => setWeightInput(wt.toFixed(1))}
-                            className={`px-2 py-0.5 rounded text-[10.5px] font-mono font-bold border transition ${
-                              parseFloat(weightInput) === wt
-                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
-                                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                            }`}
-                          >
-                            {wt}kg
-                          </button>
-                        ))}
-                      </div>
                     </div>
 
                     {/* Estimated Pieces Section */}
@@ -1724,25 +1707,6 @@ export const DropScreen: React.FC = () => {
                         >
                           +
                         </button>
-                      </div>
-
-                      {/* Quick Pieces Presets */}
-                      <div className="pt-1 flex flex-wrap gap-1">
-                        <span className="text-[10px] text-slate-500 self-center mr-1">Presets:</span>
-                        {[3, 5, 8, 10, 15, 20, 25, 30].map(pc => (
-                          <button
-                            key={pc}
-                            type="button"
-                            onClick={() => setPiecesInput(pc.toString())}
-                            className={`px-2 py-0.5 rounded text-[10.5px] font-mono font-bold border transition ${
-                              parseInt(piecesInput, 10) === pc
-                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
-                                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                            }`}
-                          >
-                            {pc} pcs
-                          </button>
-                        ))}
                       </div>
                     </div>
                   </div>
@@ -2628,19 +2592,19 @@ export const DropScreen: React.FC = () => {
                           {advanceDiffOption === 'CARRY_FORWARD' && <Check className="w-3 h-3 text-white" />}
                         </div>
                         <span className={`text-[9px] mt-0.5 ${advanceDiffOption === 'CARRY_FORWARD' ? 'text-blue-100' : 'text-slate-500'}`}>
-                          Save to customer account
+                          Show on bill & add to next order
                         </span>
                       </button>
                     </div>
 
                     {advanceDiffOption === 'WAIVE' && (
                       <div className="text-[10px] text-emerald-800 bg-emerald-100/70 p-1.5 rounded border border-emerald-300 font-medium">
-                        ✓ ₹{advanceDiff.toFixed(2)} will be adjusted/waived. Order will be marked fully settled.
+                        ✓ ₹{advanceDiff.toFixed(2)} will be adjusted/waived as discount. Order balance will be ₹0 Due.
                       </div>
                     )}
                     {advanceDiffOption === 'CARRY_FORWARD' && (
                       <div className="text-[10px] text-blue-800 bg-blue-100/70 p-1.5 rounded border border-blue-300 font-medium">
-                        ✓ ₹{advanceDiff.toFixed(2)} will be saved to {selectedCustomer.name}'s adjustment balance for their next order.
+                        ✓ ₹{advanceDiff.toFixed(2)} will show as Balance Due on bill and be saved to {selectedCustomer.name}'s account to collect in next order.
                       </div>
                     )}
                   </div>

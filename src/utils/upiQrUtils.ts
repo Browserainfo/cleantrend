@@ -195,8 +195,8 @@ export async function renderBrandedPaymentCardDataUrl(params: {
           return;
         }
 
-        const payeeName = (params.payeeName || 'PRITPAL SINGH').trim();
-        const upiId = (params.upiId || '9041590866@hdfc').trim();
+        const payeeName = (params.payeeName || 'Trendera Dry Cleaning').trim();
+        const upiId = (params.upiId || 'smarthub.2988354@hdfcbank').trim();
         const businessName = (params.businessName || 'TRENDERA DRY CLEANERS').trim();
         const amount = typeof params.amount === 'number' && params.amount > 0 ? params.amount : 0;
         const orderNumber = params.orderNumber ? String(params.orderNumber).trim() : '';
@@ -327,8 +327,8 @@ export async function generateOrderUpiQr(
   order: Order,
   settings: BusinessSettings
 ): Promise<{ qrDataUrl: string; upiUri: string; amount: number; upiId: string }> {
-  const upiId = (settings.upiId || '9041590866@hdfc').trim();
-  const payeeName = (settings.upiPayeeName || settings.businessName || 'PRITPAL SINGH').trim();
+  const upiId = (settings.upiId || 'smarthub.2988354@hdfcbank').trim();
+  const payeeName = (settings.upiPayeeName || settings.businessName || 'Trendera Dry Cleaning').trim();
   
   // Amount to collect: balance due if > 0, otherwise net amount
   const rawAmt = order.balanceDue > 0 ? order.balanceDue : (order.netAmount || 0);
