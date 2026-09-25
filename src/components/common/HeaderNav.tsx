@@ -80,12 +80,25 @@ export const HeaderNav: React.FC = () => {
         <div className="flex items-center gap-3">
           <div 
             onClick={() => handleMenuClick('HOME')} 
-            className="flex items-center gap-2 cursor-pointer hover:opacity-90 transition"
+            className="flex items-center gap-2.5 cursor-pointer hover:opacity-90 transition"
             title={`${businessSettings.businessName || 'Store'} Front Counter Desk (Home)`}
           >
-            <span className="h-2 w-2 rounded-full bg-sky-400 animate-pulse"></span>
+            {/* Live Status Indicator (Leading) */}
+            <span className="relative flex h-2.5 w-2.5 items-center justify-center shrink-0" title="System Live (Online & Synced)">
+              <span className="absolute inline-flex h-full w-full rounded-full bg-sky-400 animate-live-ping opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-sky-400 animate-live-blink"></span>
+            </span>
+
+            {businessSettings.logoUrl && (
+              <img 
+                src={businessSettings.logoUrl} 
+                alt="Store Logo" 
+                className="h-6 w-auto max-w-[80px] object-contain rounded bg-white/95 px-1 py-0.5 shadow-2xs border border-white/20" 
+              />
+            )}
+
             <span className="font-bold text-white tracking-wide">{businessSettings.businessName || businessSettings.displayName || businessSettings.storeName}</span>
-            <span className="text-slate-400 text-[11px]">| {businessSettings.address}</span>
+            <span className="text-slate-400 text-[11px] hidden md:inline">| {businessSettings.address}</span>
           </div>
 
           <div className="h-3.5 w-px bg-slate-800 hidden sm:block"></div>
@@ -224,9 +237,8 @@ export const HeaderNav: React.FC = () => {
       </div>
 
       {/* Main 8-Module Navigation Bar */}
-      <div className="px-4 py-2 flex items-center justify-between flex-wrap gap-2">
-        <nav className="flex items-center gap-1 sm:gap-1.5 flex-wrap">
-          {/* 0. Home / Front Counter */}
+      <nav aria-label="Main Navigation" className="px-4 py-2 flex items-center gap-1 sm:gap-1.5 flex-wrap">
+        {/* 0. Home / Front Counter */}
           <button
             id="menu-home"
             onClick={() => handleMenuClick('HOME')}
@@ -366,10 +378,9 @@ export const HeaderNav: React.FC = () => {
             <span>Admin</span>
             {currentRole === 'MANAGER' && <Lock className="w-3 h-3 text-amber-400" />}
           </button>
-        </nav>
 
         {/* Right Action Buttons: Edit (F4), Search (F2), User Profile */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 ml-auto">
           {/* Edit (F4) Button */}
           <button
             id="btn-edit-f4"
@@ -413,7 +424,7 @@ export const HeaderNav: React.FC = () => {
             </div>
           </div>
         </div>
-      </div>
+      </nav>
     </header>
   );
 };

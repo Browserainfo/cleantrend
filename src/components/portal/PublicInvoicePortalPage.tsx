@@ -31,6 +31,7 @@ import { printThermalBookingReceipt } from '../../utils/printUtils';
 import { numberToIndianWords } from '../../utils/currencyUtils';
 import { fetchInvoiceFromServer, findOrderFromReceiptQuery } from '../../utils/portalUrlUtils';
 import { generateOrderUpiQr } from '../../utils/upiQrUtils';
+import { updateDocumentFavicon } from '../../utils/faviconUtils';
 
 interface PublicInvoicePortalPageProps {
   order?: Order | null;
@@ -97,6 +98,19 @@ export const PublicInvoicePortalPage: React.FC<PublicInvoicePortalPageProps> = (
     setMeta('name', 'twitter:title', 'Trendera Invoice');
     setMeta('name', 'twitter:description', 'Trendera Customer Invoice / Receipt');
   }, []);
+
+  // Synchronize browser tab favicon with active store settings
+  useEffect(() => {
+    if (activeSettings.faviconUrl) {
+      updateDocumentFavicon(activeSettings.faviconUrl);
+    } else {
+      updateDocumentFavicon('/favicon.ico');
+    }
+    const bName = activeSettings.businessName || activeSettings.displayName || 'Trendera Dry Cleaning';
+    if (currentOrder) {
+      document.title = `${bName} - Invoice #${currentOrder.orderNumber}`;
+    }
+  }, [activeSettings, currentOrder]);
 
   // Dynamically generate standards-compliant UPI QR for the current order
   useEffect(() => {
@@ -273,7 +287,11 @@ export const PublicInvoicePortalPage: React.FC<PublicInvoicePortalPageProps> = (
               <Building2 className="w-4 h-4 text-sky-400" />
               <span>{activeSettings.businessName}</span>
             </div>
-            <p className="text-slate-400">{activeSettings.address}</p>
+            <p className="text-slate-400">
+              {activeSettings.address && activeSettings.branchName && !activeSettings.address.toLowerCase().includes(activeSettings.branchName.toLowerCase())
+                ? `${activeSettings.address}, ${activeSettings.branchName}`
+                : (activeSettings.address || activeSettings.branchName)}
+            </p>
             <div className="text-slate-300 flex items-center gap-1 font-semibold pt-1 border-t border-slate-800">
               <Phone className="w-3.5 h-3.5 text-emerald-400" />
               <span>Helpline: {activeSettings.phone}</span>
@@ -308,9 +326,17 @@ export const PublicInvoicePortalPage: React.FC<PublicInvoicePortalPageProps> = (
       {/* Top Brand Banner */}
       <header className="bg-slate-900 text-white px-4 sm:px-8 py-3 flex items-center justify-between border-b border-slate-800 shadow-md">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-sky-600 flex items-center justify-center text-white shadow-xs font-black text-sm">
-            T
-          </div>
+          {activeSettings.logoUrl ? (
+            <img 
+              src={activeSettings.logoUrl} 
+              alt="Logo" 
+              className="h-10 w-auto max-w-[120px] object-contain rounded-lg bg-white p-1 shadow-xs border border-white/20" 
+            />
+          ) : (
+            <div className="w-9 h-9 rounded-lg bg-sky-600 flex items-center justify-center text-white shadow-xs font-black text-sm">
+              T
+            </div>
+          )}
           <div>
             <div className="font-extrabold text-sm sm:text-base text-white flex items-center gap-2">
               <span>{activeSettings.businessName}</span>
@@ -402,14 +428,27 @@ export const PublicInvoicePortalPage: React.FC<PublicInvoicePortalPageProps> = (
         <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-4 sm:p-8 space-y-6">
           {/* Invoice Header */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-200 pb-6 gap-4">
-            <div>
-              <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-                {activeSettings.businessName}
-              </h1>
-              <p className="text-xs text-slate-500 max-w-sm mt-1">{activeSettings.address}</p>
-              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600 mt-2 font-medium">
-                <span>Phone: {activeSettings.phone}</span>
-                {activeSettings.gstin && <span>GSTIN: {activeSettings.gstin}</span>}
+            <div className="flex items-start gap-4">
+              {activeSettings.logoUrl && (
+                <img 
+                  src={activeSettings.logoUrl} 
+                  alt="Store Logo" 
+                  className="h-14 w-auto max-w-[140px] object-contain rounded bg-white p-1 border border-slate-200 shadow-xs" 
+                />
+              )}
+              <div>
+                <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                  {activeSettings.businessName}
+                </h1>
+                <p className="text-xs text-slate-500 max-w-sm mt-1">
+                  {activeSettings.address && activeSettings.branchName && !activeSettings.address.toLowerCase().includes(activeSettings.branchName.toLowerCase())
+                    ? `${activeSettings.address}, ${activeSettings.branchName}`
+                    : (activeSettings.address || activeSettings.branchName)}
+                </p>
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600 mt-2 font-medium">
+                  <span>Phone: {activeSettings.phone}</span>
+                  {activeSettings.gstin && <span>GSTIN: {activeSettings.gstin}</span>}
+                </div>
               </div>
             </div>
 

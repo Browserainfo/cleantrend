@@ -28,6 +28,7 @@ import {
 import { BusinessSettings } from '../../types';
 import { printBridgeService, BridgeStatus, PrinterDevice } from '../../services/printBridgeService';
 import { deriveEffectiveBranchCode } from '../../utils/pieceTagUtils';
+import { updateDocumentFavicon } from '../../utils/faviconUtils';
 import { buildUpiPaymentUri, generateUpiQrDataUrl, verifyUpiQrScanner, renderBrandedPaymentCardDataUrl } from '../../utils/upiQrUtils';
 
 export const BusinessSettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
@@ -135,7 +136,8 @@ export const BusinessSettingsModal: React.FC<{ isOpen: boolean; onClose: () => v
       const dataUrl = uploadEvent.target?.result as string;
       setFaviconPreview(dataUrl);
       setFormData(prev => ({ ...prev, faviconUrl: dataUrl }));
-      showToast('Favicon updated.', 'success');
+      updateDocumentFavicon(dataUrl);
+      showToast('Favicon updated and applied to browser tab.', 'success');
     };
     reader.readAsDataURL(file);
   };

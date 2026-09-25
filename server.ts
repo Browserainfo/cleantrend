@@ -77,6 +77,35 @@ const PORT = Number(process.env.PORT) || 3000;
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
+
+// Dynamic Favicon handler: returns configured business favicon before static fallback
+app.get(['/favicon.ico', '/favicon.png'], (req, res) => {
+  const faviconUrl = db?.settings?.faviconUrl;
+  if (faviconUrl && faviconUrl.startsWith('data:image/')) {
+    try {
+      const parts = faviconUrl.split(',');
+      const match = parts[0].match(/:(.*?);/);
+      const mime = match ? match[1] : 'image/png';
+      const buffer = Buffer.from(parts[1], 'base64');
+      res.setHeader('Content-Type', mime);
+      res.setHeader('Cache-Control', 'public, max-age=60');
+      return res.end(buffer);
+    } catch (e) {
+      console.warn('Error serving base64 favicon:', e);
+    }
+  }
+  if (faviconUrl && faviconUrl.startsWith('http')) {
+    return res.redirect(faviconUrl);
+  }
+  const defaultIco = path.join(process.cwd(), 'public', 'favicon.ico');
+  if (fs.existsSync(defaultIco)) {
+    res.setHeader('Content-Type', 'image/x-icon');
+    return res.sendFile(defaultIco);
+  }
+  res.setHeader('Content-Type', 'image/svg+xml');
+  return res.send('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#0284c7"/><path d="M16 18h32v8H36v22h-8V26H16z" fill="#ffffff"/></svg>');
+});
+
 app.use(express.static(path.join(process.cwd(), 'public')));
 
 // CORS headers for public API access
@@ -259,11 +288,37 @@ function loadDatabase(): StorageData {
   };
 }
 
+function syncFaviconToDisk(faviconUrl?: string) {
+  if (!faviconUrl) return;
+  try {
+    if (faviconUrl.startsWith('data:image/')) {
+      const parts = faviconUrl.split(',');
+      if (parts[1]) {
+        const buffer = Buffer.from(parts[1], 'base64');
+        const pubDir = path.join(process.cwd(), 'public');
+        if (!fs.existsSync(pubDir)) fs.mkdirSync(pubDir, { recursive: true });
+        fs.writeFileSync(path.join(pubDir, 'favicon.ico'), buffer);
+        fs.writeFileSync(path.join(pubDir, 'favicon.png'), buffer);
+
+        const distDir = path.join(process.cwd(), 'dist');
+        if (fs.existsSync(distDir)) {
+          fs.writeFileSync(path.join(distDir, 'favicon.ico'), buffer);
+          fs.writeFileSync(path.join(distDir, 'favicon.png'), buffer);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Could not sync favicon to disk:', err);
+  }
+}
+
 let db = loadDatabase();
+syncFaviconToDisk(db.settings?.faviconUrl);
 
 function saveDatabase() {
   try {
     fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf-8');
+    syncFaviconToDisk(db.settings?.faviconUrl);
   } catch (err) {
     console.error('Error saving DB_FILE:', err);
   }
@@ -462,6 +517,7 @@ app.get('/api/invoice/:ref', (req, res) => {
       email: db.settings.email,
       gstin: db.settings.gstin,
       logoUrl: db.settings.logoUrl,
+      faviconUrl: db.settings.faviconUrl,
       receiptFooterMessage: db.settings.receiptFooterMessage,
       onlinePortalDomain: db.settings.onlinePortalDomain,
       upiId: db.settings.upiId || 'smarthub.2988354@hdfcbank',
@@ -493,6 +549,7 @@ app.get('/api/invoice', (req, res) => {
       email: db.settings.email,
       gstin: db.settings.gstin,
       logoUrl: db.settings.logoUrl,
+      faviconUrl: db.settings.faviconUrl,
       receiptFooterMessage: db.settings.receiptFooterMessage,
       onlinePortalDomain: db.settings.onlinePortalDomain,
       upiId: db.settings.upiId || 'smarthub.2988354@hdfcbank',
@@ -1059,8 +1116,8 @@ app.post('/api/users/:id/toggle-active', requireAuth, requireRole('ADMIN'), (req
 // SETTINGS & CRM DATA ROUTES (ROLE PROTECTED)
 // -------------------------------------------------------------
 
-// GET Settings - requires authenticated user (Admin or Manager)
-app.get('/api/settings', requireAuth, (req, res) => {
+// GET Settings - Public read for branding (Logo, Business Name, Favicon, Store Address)
+app.get('/api/settings', (req, res) => {
   res.json({ success: true, settings: db.settings });
 });
 
@@ -2320,12 +2377,14 @@ app.post('/api/backup/restore', requireAuth, requireRole('ADMIN'), (req, res) =>
 // VITE MIDDLEWARE & SPA SERVING
 // -------------------------------------------------------------
 async function startServer() {
+  const hasDist = fs.existsSync(path.join(process.cwd(), 'dist', 'index.html'));
+  const isProd = process.env.NODE_ENV === 'production' && hasDist;
+
   const renderPortalInvoiceHtml = async (req: express.Request, res: express.Response, viteInstance?: any) => {
     try {
-      const isProd = process.env.NODE_ENV === 'production';
-      const indexPath = isProd 
-        ? path.join(process.cwd(), 'dist', 'index.html')
-        : path.join(process.cwd(), 'index.html');
+      const distIndex = path.join(process.cwd(), 'dist', 'index.html');
+      const rootIndex = path.join(process.cwd(), 'index.html');
+      const indexPath = (isProd && fs.existsSync(distIndex)) ? distIndex : (fs.existsSync(rootIndex) ? rootIndex : distIndex);
 
       if (!fs.existsSync(indexPath)) {
         return res.status(404).send('Not Found');
@@ -2383,8 +2442,6 @@ async function startServer() {
     }
   };
 
-  const isProd = process.env.NODE_ENV === 'production' || fs.existsSync(path.join(process.cwd(), 'dist', 'index.html'));
-
   if (!isProd) {
     const vite = await createViteServer({
       configFile: path.resolve(process.cwd(), 'vite.config.ts'),
@@ -2409,6 +2466,7 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
+    const distIndex = path.join(distPath, 'index.html');
 
     // Handle /portal/invoice requests in production
     app.get(['/portal/invoice', '/portal/invoice/*'], async (req, res) => {
@@ -2417,7 +2475,16 @@ async function startServer() {
 
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+      if (fs.existsSync(distIndex)) {
+        res.sendFile(distIndex);
+      } else {
+        const rootIndex = path.join(process.cwd(), 'index.html');
+        if (fs.existsSync(rootIndex)) {
+          res.sendFile(rootIndex);
+        } else {
+          res.status(404).send('Application build not found.');
+        }
+      }
     });
   }
 

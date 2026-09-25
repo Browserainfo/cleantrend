@@ -3,10 +3,60 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Cleanera Dry Cleaning CRM</title>
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="shortcut icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/favicon.png" />
+    <title>Trendera Dry Cleaning</title>
     <meta name="description" content="Comprehensive CRM and operations management platform for Trendera Dry Cleaners, featuring secure authentication, role-based anti-fraud controls, and end-to-end garment workflow tracking." />
-    <meta property="og:title" content="Cleanera Dry Cleaning CRM" />
+    <meta property="og:title" content="Trendera Dry Cleaning" />
     <meta property="og:description" content="Comprehensive CRM and operations management platform for Trendera Dry Cleaners, featuring secure authentication, role-based anti-fraud controls, and end-to-end garment workflow tracking." />
+    <script>
+      (function() {
+        try {
+          var s = localStorage.getItem('cleanera_settings');
+          var iconUrl = '/favicon.ico';
+          if (s) {
+            var parsed = JSON.parse(s);
+            if (parsed.faviconUrl) {
+              iconUrl = parsed.faviconUrl;
+            }
+            if (parsed.businessName) {
+              document.title = parsed.businessName + (parsed.branchName ? ' (' + parsed.branchName + ')' : '');
+            }
+          }
+          if (iconUrl) {
+            var existing = document.querySelectorAll("link[rel*='icon']");
+            for (var i = 0; i < existing.length; i++) {
+              if (existing[i].parentNode) existing[i].parentNode.removeChild(existing[i]);
+            }
+            var isSvg = iconUrl.indexOf('data:image/svg') === 0 || iconUrl.indexOf('.svg') !== -1;
+            var isPng = iconUrl.indexOf('data:image/png') === 0 || iconUrl.indexOf('.png') !== -1;
+            var mimeType = isSvg ? 'image/svg+xml' : (isPng ? 'image/png' : 'image/x-icon');
+
+            var l1 = document.createElement('link');
+            l1.id = 'dynamic-favicon';
+            l1.rel = 'icon';
+            l1.type = mimeType;
+            l1.href = iconUrl;
+            document.head.appendChild(l1);
+
+            var l2 = document.createElement('link');
+            l2.id = 'dynamic-shortcut-icon';
+            l2.rel = 'shortcut icon';
+            l2.type = mimeType;
+            l2.href = iconUrl;
+            document.head.appendChild(l2);
+
+            var l3 = document.createElement('link');
+            l3.id = 'dynamic-apple-icon';
+            l3.rel = 'apple-touch-icon';
+            l3.href = iconUrl;
+            document.head.appendChild(l3);
+          }
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

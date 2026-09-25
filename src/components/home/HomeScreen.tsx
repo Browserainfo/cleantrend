@@ -287,14 +287,26 @@ export const HomeScreen: React.FC = () => {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight">
-                  {businessSettings.businessName}
+                  {businessSettings.businessName?.replace(/\s*CRM\s*$/i, '') || 'Trendera Dry Cleaning'}
                 </h1>
                 <span className="bg-sky-100 text-sky-800 text-[11px] font-bold px-2 py-0.5 rounded">
                   Front Counter POS
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                Branch: <span className="font-semibold text-slate-700">{businessSettings.branchName || 'Sector 1 Noida'}</span> ({businessSettings.branchCode || 'TE02'})
+                Branch: <span className="font-semibold text-slate-700">
+                  {(() => {
+                    const addr = (businessSettings.address || '').trim();
+                    const branch = (businessSettings.branchName || '').trim();
+                    if (addr === 'Goyal Colony' || branch === 'Banur') {
+                      return 'Goyal Colony, Banur';
+                    }
+                    if (addr && branch) {
+                      return addr.toLowerCase().includes(branch.toLowerCase()) ? addr : `${addr}, ${branch}`;
+                    }
+                    return branch || addr || 'Goyal Colony, Banur';
+                  })()}
+                </span> ({businessSettings.branchCode || 'TE02'})
               </p>
             </div>
 

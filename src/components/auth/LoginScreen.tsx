@@ -13,13 +13,40 @@ import {
 import { useApp } from '../../context/AppContext';
 
 export const LoginScreen: React.FC = () => {
-  const { login, isAuthenticating } = useApp();
+  const { login, isAuthenticating, businessSettings } = useApp();
 
+  const [serverSettings, setServerSettings] = useState<any>(null);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Ensure fresh branding and logo are always fetched from server even before login
+  React.useEffect(() => {
+    fetch('/api/settings')
+      .then(res => res.json())
+      .then(data => {
+        if (data?.settings) {
+          setServerSettings(data.settings);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const effectiveLogo = businessSettings?.logoUrl || serverSettings?.logoUrl || (() => {
+    try {
+      const s = localStorage.getItem('cleanera_settings');
+      if (s) return JSON.parse(s)?.logoUrl;
+    } catch (e) {}
+    return null;
+  })();
+
+  const effectiveBusinessName = (
+    businessSettings?.businessName || 
+    serverSettings?.businessName || 
+    'Dry Cleaning CRM'
+  ).trim();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,17 +78,39 @@ export const LoginScreen: React.FC = () => {
 
       <div className="w-full max-w-md relative z-10">
         {/* Brand Header */}
-        <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-sky-600 text-white shadow-lg shadow-sky-600/30 mb-3 border border-sky-400/30">
-            <ShieldCheck className="w-8 h-8" />
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white flex items-center justify-center gap-2">
-            <span>TRENDERA</span>
-            <span className="text-sky-400 font-extrabold text-xs uppercase px-2 py-0.5 rounded bg-sky-950/80 border border-sky-600/40">
-              CRM
-            </span>
-          </h1>
-          <p className="text-sm text-slate-400 mt-1 font-medium">
+        <div className="text-center mb-6 flex flex-col items-center">
+          {effectiveLogo ? (
+            <div className="flex flex-col items-center gap-2 mb-2">
+              <div className="inline-flex items-center justify-center p-3 rounded-2xl bg-white/95 border border-white/40 shadow-xl shadow-black/50 transition hover:scale-105 duration-200">
+                <img 
+                  src={effectiveLogo} 
+                  alt={effectiveBusinessName} 
+                  className="h-14 sm:h-16 w-auto max-w-[220px] object-contain rounded" 
+                />
+              </div>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-sm font-extrabold tracking-wide text-white">
+                  {effectiveBusinessName}
+                </span>
+                <span className="text-sky-400 font-extrabold text-[10px] uppercase px-2 py-0.5 rounded bg-sky-950/80 border border-sky-600/40">
+                  CRM
+                </span>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-sky-600 text-white shadow-lg shadow-sky-600/30 mb-3 border border-sky-400/30">
+                <ShieldCheck className="w-8 h-8" />
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white flex items-center justify-center gap-2">
+                <span>{effectiveBusinessName.toUpperCase()}</span>
+                <span className="text-sky-400 font-extrabold text-xs uppercase px-2 py-0.5 rounded bg-sky-950/80 border border-sky-600/40">
+                  CRM
+                </span>
+              </h1>
+            </>
+          )}
+          <p className="text-xs sm:text-sm text-slate-400 mt-1 font-medium">
             Secure Login &middot; Dry Cleaning Management System
           </p>
         </div>

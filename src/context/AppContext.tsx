@@ -41,6 +41,7 @@ import {
   buildPublicReceiptUrl
 } from '../utils/portalUrlUtils';
 import { getBusinessPrefix } from '../utils/pieceTagUtils';
+import { updateDocumentFavicon } from '../utils/faviconUtils';
 import {
   loginApi,
   fetchCurrentUserApi,
@@ -619,6 +620,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, 3500);
   };
 
+  // Fetch fresh business branding from server on mount
+  useEffect(() => {
+    fetch('/api/settings')
+      .then(r => r.json())
+      .then(data => {
+        if (data?.settings) {
+          setBusinessSettings(prev => ({
+            ...prev,
+            ...data.settings,
+            logoUrl: data.settings.logoUrl || prev.logoUrl,
+            faviconUrl: data.settings.faviconUrl || prev.faviconUrl
+          }));
+        }
+      })
+      .catch(err => console.warn('Could not fetch server settings on mount:', err));
+  }, []);
+
   // Sync to localStorage
   useEffect(() => {
     localStorage.setItem('cleanera_user', JSON.stringify(currentUser));
@@ -627,8 +645,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     localStorage.setItem('cleanera_settings', JSON.stringify(businessSettings));
     // Update document title dynamically using the active business name
-    const bName = businessSettings.businessName || businessSettings.displayName || 'Dry Cleaning CRM';
+    const bName = businessSettings.businessName || businessSettings.displayName || 'Trendera Dry Cleaning';
     document.title = `${bName}${businessSettings.branchName ? ` (${businessSettings.branchName})` : ''}`;
+
+    // Dynamically update browser tab favicon with full DOM node refresh
+    if (businessSettings.faviconUrl) {
+      updateDocumentFavicon(businessSettings.faviconUrl);
+    } else {
+      updateDocumentFavicon('/favicon.ico');
+    }
   }, [businessSettings]);
 
   useEffect(() => {

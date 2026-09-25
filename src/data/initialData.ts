@@ -26,7 +26,7 @@ export const initialBusinessSettings: BusinessSettings = {
   email: 'support@trendera.com',
   website: 'https://trendera.com',
   taxNumber: '',
-  logoUrl: 'https://images.unsplash.com/photo-1545173168-9f1947eebb7f?w=160&auto=format&fit=crop&q=80',
+  logoUrl: '',
   faviconUrl: 'https://images.unsplash.com/photo-1545173168-9f1947eebb7f?w=48&auto=format&fit=crop&q=80',
   marketingMessage: 'Your space for marketing or any other message.',
   receiptFooterMessage: 'Thank You for choosing Trendera Dry Cleaning. All garments are carefully inspected before processing. We are not responsible for any article left uncollected after 15 days from the due date. We are not responsible for any damage that may occur during the cleaning process.',

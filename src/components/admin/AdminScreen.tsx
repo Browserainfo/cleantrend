@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { UserRole, User } from '../../types';
 import { deriveEffectiveBranchCode } from '../../utils/pieceTagUtils';
+import { updateDocumentFavicon } from '../../utils/faviconUtils';
 import { UserManagementScreen } from './UserManagementScreen';
 import { AdminBackupSection } from './AdminBackupSection';
 
@@ -120,7 +121,7 @@ export const AdminScreen: React.FC = () => {
       const reader = new FileReader();
       reader.onloadend = () => {
         setLogoData(reader.result as string);
-        showToast('Store logo updated and cached for receipts.', 'info');
+        showToast('Store logo updated! Remember to click "Save Business Configuration" below.', 'info');
       };
       reader.readAsDataURL(file);
     }
@@ -131,8 +132,11 @@ export const AdminScreen: React.FC = () => {
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setFaviconData(reader.result as string);
-        showToast('Favicon updated.', 'info');
+        const data = reader.result as string;
+        setFaviconData(data);
+        // Instantly force-refresh browser tab favicon
+        updateDocumentFavicon(data);
+        showToast('Browser tab favicon updated! Click "Save Business Configuration" to permanently save.', 'info');
       };
       reader.readAsDataURL(file);
     }
@@ -406,17 +410,22 @@ export const AdminScreen: React.FC = () => {
               </div>
 
               {/* Branding: Logo & Favicon Upload */}
-              <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-200">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-200">
                 <div className="space-y-2 p-3 bg-slate-50 rounded-lg border border-slate-200">
-                  <label className="font-bold text-slate-800 flex items-center justify-between">
-                    <span>Store Logo (Printed on Thermal Receipt)</span>
+                  <div className="flex items-center justify-between">
+                    <label className="font-bold text-slate-800 text-xs sm:text-sm">
+                      Store Logo (Header, Receipts, Invoices & Portal)
+                    </label>
                     <Upload className="w-3.5 h-3.5 text-sky-600" />
-                  </label>
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    Displayed in the <strong>CRM Top Header</strong>, <strong>Thermal POS Receipts</strong>, <strong>Customer Online Invoices</strong>, and the <strong>Login Screen</strong>.
+                  </p>
                   <div className="flex items-center gap-3">
                     {logoData ? (
-                      <img src={logoData} alt="Logo" className="w-12 h-12 object-contain bg-white p-1 rounded border border-slate-300" />
+                      <img src={logoData} alt="Logo" className="w-12 h-12 object-contain bg-white p-1 rounded border border-slate-300 shadow-xs" />
                     ) : (
-                      <div className="w-12 h-12 bg-slate-200 rounded flex items-center justify-center font-bold text-slate-500">
+                      <div className="w-12 h-12 bg-slate-200 rounded flex items-center justify-center font-bold text-slate-500 text-xs">
                         Logo
                       </div>
                     )}
@@ -430,15 +439,20 @@ export const AdminScreen: React.FC = () => {
                 </div>
 
                 <div className="space-y-2 p-3 bg-slate-50 rounded-lg border border-slate-200">
-                  <label className="font-bold text-slate-800 flex items-center justify-between">
-                    <span>Favicon (Browser Tab Icon)</span>
+                  <div className="flex items-center justify-between">
+                    <label className="font-bold text-slate-800 text-xs sm:text-sm">
+                      Favicon (Browser Tab Icon)
+                    </label>
                     <Upload className="w-3.5 h-3.5 text-sky-600" />
-                  </label>
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    Appears directly in the <strong>Browser Tab</strong> next to your page title ("Trendera Dry Cleaning").
+                  </p>
                   <div className="flex items-center gap-3">
                     {faviconData ? (
-                      <img src={faviconData} alt="Favicon" className="w-8 h-8 object-contain bg-white p-1 rounded border border-slate-300" />
+                      <img src={faviconData} alt="Favicon" className="w-9 h-9 object-contain bg-white p-1 rounded border border-slate-300 shadow-xs" />
                     ) : (
-                      <div className="w-8 h-8 bg-slate-200 rounded flex items-center justify-center font-bold text-slate-500 text-[10px]">
+                      <div className="w-9 h-9 bg-slate-200 rounded flex items-center justify-center font-bold text-slate-500 text-[10px]">
                         Icon
                       </div>
                     )}

@@ -174,10 +174,23 @@ export const CustomerPaymentPortal: React.FC<{ isOpen: boolean; onClose: () => v
         <div className="p-4 sm:p-8 overflow-y-auto space-y-6 flex-1 bg-white">
           {/* Header section */}
           <div className="flex justify-between items-start border-b border-slate-200 pb-4">
-            <div>
-              <h2 className="text-xl font-bold text-slate-900">{businessSettings.businessName}</h2>
-              <p className="text-xs text-slate-500">{businessSettings.address}</p>
-              <p className="text-xs text-slate-500">Phone: {businessSettings.phone}</p>
+            <div className="flex items-start gap-3">
+              {businessSettings.logoUrl && (
+                <img 
+                  src={businessSettings.logoUrl} 
+                  alt="Store Logo" 
+                  className="h-12 w-auto max-w-[120px] object-contain rounded bg-white p-1 border border-slate-200 shadow-xs" 
+                />
+              )}
+              <div>
+                <h2 className="text-xl font-bold text-slate-900">{businessSettings.businessName}</h2>
+                <p className="text-xs text-slate-500">
+                  {businessSettings.address && businessSettings.branchName && !businessSettings.address.toLowerCase().includes(businessSettings.branchName.toLowerCase())
+                    ? `${businessSettings.address}, ${businessSettings.branchName}`
+                    : (businessSettings.address || businessSettings.branchName)}
+                </p>
+                <p className="text-xs text-slate-500">Phone: {businessSettings.phone}</p>
+              </div>
             </div>
             <div className="text-right">
               <span className="text-xs text-slate-400 block">TAX INVOICE</span>
