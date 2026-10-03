@@ -23,16 +23,30 @@ import {
   printPiece2RTags, 
   generate2RMatrixSVG 
 } from '../../utils/pieceTagUtils';
+import { Order } from '../../types';
 
-export const GarmentTagPrintModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
+export const GarmentTagPrintModal: React.FC<{ 
+  isOpen: boolean; 
+  onClose: () => void;
+  order?: Order | null;
+}> = ({ isOpen, onClose, order: propOrder }) => {
   const { 
+    activeTagOrder,
+    setActiveTagOrder,
     selectedOrder, 
     orders, 
     businessSettings, 
     showToast 
   } = useApp();
 
-  const order = selectedOrder || orders[0];
+  const order = propOrder || activeTagOrder || selectedOrder || orders[0];
+
+  const handleModalClose = () => {
+    onClose();
+    if (setActiveTagOrder) {
+      setActiveTagOrder(null);
+    }
+  };
 
   // Generate expanded piece tags for the active order
   const pieceTags: PieceTagData[] = useMemo(() => {
@@ -136,7 +150,7 @@ export const GarmentTagPrintModal: React.FC<{ isOpen: boolean; onClose: () => vo
           </div>
 
           <button 
-            onClick={onClose}
+            onClick={handleModalClose}
             className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition"
           >
             <X className="w-4 h-4" />
@@ -477,7 +491,7 @@ export const GarmentTagPrintModal: React.FC<{ isOpen: boolean; onClose: () => vo
 
                 <button
                   type="button"
-                  onClick={onClose}
+                  onClick={handleModalClose}
                   className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-md font-semibold text-xs transition"
                 >
                   Close

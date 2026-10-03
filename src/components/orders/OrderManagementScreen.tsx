@@ -42,6 +42,8 @@ export const OrderManagementScreen: React.FC = () => {
     setActiveOrderId,
     setThermalReceiptModalOpen,
     setGarmentTagPrintModalOpen,
+    openGarmentTagModal,
+    setActiveTagOrder,
     setWhatsAppSimulatorOpen,
     updateOrder,
     cancelOrder,
@@ -679,8 +681,7 @@ export const OrderManagementScreen: React.FC = () => {
                           {/* Print 2R Tags */}
                           <button
                             onClick={() => {
-                              setActiveOrderId(order.id);
-                              setGarmentTagPrintModalOpen(true);
+                              openGarmentTagModal(order);
                             }}
                             className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded border border-slate-200 transition"
                             title="Print Garment 2R Piece Tags"
@@ -1416,8 +1417,7 @@ export const OrderManagementScreen: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => {
-                    setActiveOrderId(editingOrder.id);
-                    setGarmentTagPrintModalOpen(true);
+                    openGarmentTagModal(editingOrder);
                   }}
                   className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 rounded text-xs font-bold flex items-center gap-1 border border-slate-300 transition"
                 >

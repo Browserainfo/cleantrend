@@ -100,9 +100,11 @@ export interface PaymentTransaction {
   id: string;
   orderId: string;
   amount: number;
-  paymentMethod: 'CASH' | 'UPI' | 'CARD' | 'NET_BANKING' | 'WALLET';
+  paymentMethod: 'CASH' | 'UPI' | 'CARD' | 'NET_BANKING' | 'WALLET' | 'RAZORPAY';
   channel: 'COUNTER' | 'ONLINE_PORTAL';
   referenceId?: string;
+  razorpayOrderId?: string;
+  razorpayPaymentId?: string;
   timestamp: string;
   collectedBy: string;
   notes?: string;
@@ -139,6 +141,12 @@ export interface Order {
   netAmount: number; // 1074.00
   advancePaid: number; // 0.00
   balanceDue: number; // 1074.00 (Net - Advance - Total Payments)
+  paymentStatus?: 'UNPAID' | 'PARTIAL' | 'PAID';
+  razorpayOrderId?: string; // Razorpay TEST order ID
+  razorpayPaymentId?: string; // Razorpay payment ID
+  razorpaySignature?: string; // Razorpay verified signature
+  razorpayPaymentStatus?: 'CREATED' | 'PAID' | 'FAILED' | 'ATTEMPTED';
+  razorpayPaidAt?: string;
   previousOrderPending?: number; // Balance due from customer's previous/last order at time of booking
   previousOrderNumber?: number; // Previous order number reference
   adjustmentApplied?: number; // Previous customer adjustment balance applied to this bill (e.g. ₹5)
@@ -219,6 +227,8 @@ export interface BusinessSettings {
   upiId?: string; // e.g. "smarthub.2988354@hdfcbank"
   upiPayeeName?: string; // e.g. "Trendera Dry Cleaning"
   includeQrInWhatsApp?: boolean; // whether to automatically append payment QR scanner
+  razorpayKeyId?: string; // Razorpay TEST Mode Key ID
+  enableRazorpayTestMode?: boolean; // toggle for Razorpay test payments
 }
 
 export const INDIAN_STATES_AND_UTS = [

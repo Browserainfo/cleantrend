@@ -27,13 +27,13 @@ export const printHtmlContent = (htmlContent: string, options: PrintDocumentOpti
     printIframe.id = iframeId;
     printIframe.name = iframeId;
     printIframe.style.position = 'fixed';
-    printIframe.style.right = '0';
-    printIframe.style.bottom = '0';
-    printIframe.style.width = '0';
-    printIframe.style.height = '0';
+    printIframe.style.left = '-9999px';
+    printIframe.style.top = '-9999px';
+    printIframe.style.width = '100%';
+    printIframe.style.height = '100%';
     printIframe.style.border = 'none';
-    printIframe.style.visibility = 'hidden';
-    printIframe.style.zIndex = '-9999';
+    printIframe.style.opacity = '0';
+    printIframe.style.pointerEvents = 'none';
 
     document.body.appendChild(printIframe);
 
@@ -44,11 +44,16 @@ export const printHtmlContent = (htmlContent: string, options: PrintDocumentOpti
       return true;
     }
 
-    const defaultPrintCss = `
+    const hasCustomPage = options.styles && options.styles.includes('@page');
+    const defaultPageRule = hasCustomPage ? '' : `
       @page {
         size: auto;
         margin: 5mm;
       }
+    `;
+
+    const defaultPrintCss = `
+      ${defaultPageRule}
       * {
         box-sizing: border-box;
         -webkit-print-color-adjust: exact !important;
@@ -100,7 +105,6 @@ export const printHtmlContent = (htmlContent: string, options: PrintDocumentOpti
       <html>
         <head>
           <meta charset="utf-8" />
-          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
           <title>${title}</title>
           <style>${defaultPrintCss}</style>
         </head>

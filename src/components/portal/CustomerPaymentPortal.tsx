@@ -20,6 +20,8 @@ import {
 } from 'lucide-react';
 import { printThermalBookingReceipt } from '../../utils/printUtils';
 import { generateOrderUpiQr } from '../../utils/upiQrUtils';
+import { RazorpayOrderResponse, launchRazorpayPaymentFlow } from '../../utils/razorpayClient';
+import { RazorpayCheckoutModal } from './RazorpayCheckoutModal';
 
 export const CustomerPaymentPortal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
   const { 
@@ -27,6 +29,7 @@ export const CustomerPaymentPortal: React.FC<{ isOpen: boolean; onClose: () => v
     orders, 
     businessSettings, 
     submitOrderUpiRef,
+    recordPayment,
     showToast 
   } = useApp();
 
@@ -41,8 +44,43 @@ export const CustomerPaymentPortal: React.FC<{ isOpen: boolean; onClose: () => v
   const [isSubmittingUtr, setIsSubmittingUtr] = useState<boolean>(false);
   const [utrSubmitted, setUtrSubmitted] = useState<string | null>(null);
 
+  // Razorpay Test Mode state
+  const [razorpayModalOpen, setRazorpayModalOpen] = useState<boolean>(false);
+  const [razorpayOrderData, setRazorpayOrderData] = useState<RazorpayOrderResponse | null>(null);
+  const [isInitiatingRazorpay, setIsInitiatingRazorpay] = useState<boolean>(false);
+
   const effectiveUpiId = businessSettings.upiId || 'smarthub.2988354@hdfcbank';
   const effectivePayeeName = businessSettings.upiPayeeName || 'Trendera Dry Cleaning';
+
+  const handlePayOnlineRazorpay = async () => {
+    if (!order) return;
+    if (order.balanceDue <= 0) {
+      showToast('This order is already paid in full.', 'info');
+      return;
+    }
+    setIsInitiatingRazorpay(true);
+    try {
+      await launchRazorpayPaymentFlow({
+        orderId: order.id,
+        onOpenModal: (orderData) => {
+          setRazorpayOrderData(orderData);
+          setRazorpayModalOpen(true);
+        },
+        onSuccess: (result) => {
+          const amt = result.transaction?.amount || order.balanceDue;
+          recordPayment(order.id, amt, 'RAZORPAY', 'ONLINE_PORTAL', result.transaction?.referenceNumber || result.transaction?.razorpayPaymentId);
+          showToast(`Payment of ₹${amt.toFixed(2)} verified via Razorpay!`, 'success');
+        },
+        onError: (errMsg) => {
+          showToast(errMsg, 'error');
+        }
+      });
+    } catch (e: any) {
+      showToast(e.message || 'Could not launch payment.', 'error');
+    } finally {
+      setIsInitiatingRazorpay(false);
+    }
+  };
 
   useEffect(() => {
     if (order && order.balanceDue > 0) {
@@ -143,14 +181,26 @@ export const CustomerPaymentPortal: React.FC<{ isOpen: boolean; onClose: () => v
           </div>
 
           {order.balanceDue > 0 ? (
-            <button
-              onClick={() => setIsPayNowModalOpen(true)}
-              className="bg-[#78b300] hover:bg-[#86c400] text-white font-black text-xs sm:text-sm px-4 py-1.5 rounded-lg shadow-xs border border-white/40 flex items-center gap-1.5 cursor-pointer"
-            >
-              <QrCode className="w-4 h-4" />
-              <span>Pay via UPI / Scan QR</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                id="portal-modal-pay-online-btn"
+                onClick={handlePayOnlineRazorpay}
+                disabled={isInitiatingRazorpay}
+                className="bg-sky-700 hover:bg-sky-600 text-white font-black text-xs sm:text-sm px-3.5 py-1.5 rounded-lg shadow-xs border border-white/40 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <CreditCard className="w-4 h-4" />
+                <span>{isInitiatingRazorpay ? 'Connecting...' : 'Pay Online (Razorpay)'}</span>
+              </button>
+              <button
+                onClick={() => setIsPayNowModalOpen(true)}
+                className="bg-[#78b300] hover:bg-[#86c400] text-white font-black text-xs sm:text-sm px-3.5 py-1.5 rounded-lg shadow-xs border border-white/40 flex items-center gap-1.5 cursor-pointer"
+              >
+                <QrCode className="w-4 h-4" />
+                <span>Scan UPI QR</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
           ) : (
             <span className="bg-emerald-800 text-white font-bold text-xs px-3 py-1 rounded-full flex items-center gap-1">
               <CheckCircle2 className="w-3.5 h-3.5" />

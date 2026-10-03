@@ -41,6 +41,7 @@ export const HeaderNav: React.FC = () => {
     setWhatsAppSimulatorOpen,
     setThermalReceiptModalOpen,
     setQRTagPreviewModalOpen,
+    openGarmentTagModal,
     setCustomerPortalOpen,
     openQRPickupModal,
     priceCorrectionRequests,
@@ -191,7 +192,7 @@ export const HeaderNav: React.FC = () => {
           {/* 2R Code / Piece Tag Simulator */}
           <button
             id="launch-qrtags-btn"
-            onClick={() => setQRTagPreviewModalOpen(true)}
+            onClick={() => openGarmentTagModal()}
             className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded flex items-center gap-1 border border-slate-700"
             title="Print & Preview 2R Code / Piece Garment Tags"
           >

@@ -43,6 +43,7 @@ export const HomeScreen: React.FC = () => {
     openQRPickupModal,
     setThermalReceiptModalOpen,
     setQRTagPreviewModalOpen,
+    openGarmentTagModal,
     setCustomerPortalOpen,
     setWhatsAppSimulatorOpen,
     businessSettings, 
@@ -667,7 +668,7 @@ export const HomeScreen: React.FC = () => {
             <span className="text-slate-300">•</span>
             <button 
               onClick={() => {
-                setQRTagPreviewModalOpen(true);
+                openGarmentTagModal();
               }}
               className="text-purple-600 hover:text-purple-800 hover:underline flex items-center gap-1"
             >

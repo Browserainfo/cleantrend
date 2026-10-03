@@ -32,6 +32,8 @@ import { numberToIndianWords } from '../../utils/currencyUtils';
 import { fetchInvoiceFromServer, findOrderFromReceiptQuery } from '../../utils/portalUrlUtils';
 import { generateOrderUpiQr } from '../../utils/upiQrUtils';
 import { updateDocumentFavicon } from '../../utils/faviconUtils';
+import { RazorpayOrderResponse, launchRazorpayPaymentFlow } from '../../utils/razorpayClient';
+import { RazorpayCheckoutModal } from './RazorpayCheckoutModal';
 
 interface PublicInvoicePortalPageProps {
   order?: Order | null;
@@ -50,6 +52,11 @@ export const PublicInvoicePortalPage: React.FC<PublicInvoicePortalPageProps> = (
   const [activeSettings, setActiveSettings] = useState<BusinessSettings>(contextSettings);
   const [isLoading, setIsLoading] = useState<boolean>(!initialOrder && Boolean(invalidQuery));
   const [fetchAttempted, setFetchAttempted] = useState<boolean>(false);
+
+  // Razorpay Test Mode state
+  const [razorpayModalOpen, setRazorpayModalOpen] = useState<boolean>(false);
+  const [razorpayOrderData, setRazorpayOrderData] = useState<RazorpayOrderResponse | null>(null);
+  const [isInitiatingRazorpay, setIsInitiatingRazorpay] = useState<boolean>(false);
 
   // UPI payment state
   const [isPayNowModalOpen, setIsPayNowModalOpen] = useState<boolean>(false);
@@ -252,6 +259,48 @@ export const PublicInvoicePortalPage: React.FC<PublicInvoicePortalPageProps> = (
     }
   };
 
+  // Pay Online via Razorpay Test Mode
+  const handlePayOnlineRazorpay = async () => {
+    if (!currentOrder) return;
+    if (currentOrder.paymentStatus === 'PAID' || effectiveBalanceDue <= 0) {
+      showToast('This invoice is already paid in full.', 'info');
+      return;
+    }
+
+    setIsInitiatingRazorpay(true);
+    try {
+      await launchRazorpayPaymentFlow({
+        orderId: currentOrder.id,
+        onOpenModal: (orderData) => {
+          setRazorpayOrderData(orderData);
+          setRazorpayModalOpen(true);
+        },
+        onSuccess: (result) => {
+          const paidAmt = result.transaction?.amount || effectiveBalanceDue;
+          showToast(`Payment of ₹${paidAmt.toFixed(2)} verified via Razorpay! Invoice marked as Paid.`, 'success');
+          setCurrentOrder(prev => prev ? ({
+            ...prev,
+            advancePaid: (prev.advancePaid || 0) + paidAmt,
+            balanceDue: 0,
+            paymentStatus: 'PAID',
+            razorpayOrderId: result.transaction?.razorpayOrderId,
+            razorpayPaymentId: result.transaction?.referenceNumber || result.transaction?.razorpayPaymentId,
+            razorpayPaymentStatus: 'PAID',
+            razorpayPaidAt: new Date().toISOString()
+          }) : null);
+        },
+        onError: (errMsg) => {
+          showToast(errMsg, 'error');
+        }
+      });
+    } catch (err: any) {
+      console.error('Razorpay launch error:', err);
+      showToast(err.message || 'Could not initiate online payment.', 'error');
+    } finally {
+      setIsInitiatingRazorpay(false);
+    }
+  };
+
   // 1. Loading State
   if (isLoading) {
     return (
@@ -387,15 +436,27 @@ export const PublicInvoicePortalPage: React.FC<PublicInvoicePortalPageProps> = (
           </div>
 
           {effectiveBalanceDue > 0 ? (
-            <button
-              id="public-portal-pay-now-btn"
-              onClick={handleOpenPaymentFlow}
-              className="bg-[#78b300] hover:bg-[#86c400] active:scale-98 text-white font-black text-xs sm:text-sm px-5 py-2.5 rounded-lg shadow-sm border border-white/40 transition flex items-center gap-2 cursor-pointer"
-            >
-              <QrCode className="w-4 h-4 text-white" />
-              <span>Pay via UPI / Scan QR</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                id="public-portal-pay-online-btn"
+                type="button"
+                onClick={handlePayOnlineRazorpay}
+                disabled={isInitiatingRazorpay}
+                className="bg-sky-600 hover:bg-sky-500 active:scale-98 text-white font-black text-xs sm:text-sm px-4 py-2.5 rounded-lg shadow-sm border border-white/40 transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <CreditCard className="w-4 h-4 text-white" />
+                <span>{isInitiatingRazorpay ? 'Opening Gateway...' : 'Pay Online (Razorpay Test)'}</span>
+              </button>
+              <button
+                id="public-portal-pay-now-btn"
+                onClick={handleOpenPaymentFlow}
+                className="bg-[#78b300] hover:bg-[#86c400] active:scale-98 text-white font-black text-xs sm:text-sm px-4 py-2.5 rounded-lg shadow-sm border border-white/40 transition flex items-center gap-1.5 cursor-pointer"
+              >
+                <QrCode className="w-4 h-4 text-white" />
+                <span>Scan UPI QR</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
           ) : (
             <span className="bg-emerald-800 text-white font-extrabold text-xs px-3.5 py-1.5 rounded-full flex items-center gap-1.5 shadow-xs border border-emerald-600">
               <CheckCircle2 className="w-4 h-4 text-emerald-300" />
@@ -611,7 +672,7 @@ export const PublicInvoicePortalPage: React.FC<PublicInvoicePortalPageProps> = (
             </div>
           </div>
 
-          {/* ON-PAGE UPI PAYMENT SCANNER SECTION */}
+          {/* ON-PAGE UPI & RAZORPAY PAYMENT SECTION */}
           {effectiveBalanceDue > 0 && (
             <div id="upi-payment-section" className="pt-6 border-t-2 border-emerald-200">
               <div className="bg-gradient-to-br from-emerald-50 via-white to-teal-50 rounded-2xl border-2 border-emerald-300 p-4 sm:p-6 shadow-sm space-y-5">
@@ -619,15 +680,43 @@ export const PublicInvoicePortalPage: React.FC<PublicInvoicePortalPageProps> = (
                   <div>
                     <div className="flex items-center gap-2">
                       <QrCode className="w-5 h-5 text-emerald-700" />
-                      <h2 className="font-black text-slate-900 text-base sm:text-lg">Scan & Pay via UPI</h2>
+                      <h2 className="font-black text-slate-900 text-base sm:text-lg">Online Payment & UPI</h2>
                     </div>
                     <p className="text-xs text-slate-600 mt-0.5">
-                      Pay instantly with Google Pay, PhonePe, Paytm, BHIM, or any banking app
+                      Pay instantly with Razorpay (Cards / UPI / NetBanking) or Scan UPI QR
                     </p>
                   </div>
                   <div className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg font-mono font-black text-sm shadow-xs">
                     Payable: ₹{effectiveBalanceDue.toFixed(2)}
                   </div>
+                </div>
+
+                {/* Razorpay Test Mode Instant Checkout Card */}
+                <div className="bg-gradient-to-r from-[#0c2340] via-[#0f2d52] to-[#123663] text-white rounded-xl p-4 sm:p-5 shadow-md border border-sky-600/40 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <CreditCard className="w-5 h-5 text-sky-400" />
+                      <span className="font-black text-base sm:text-lg tracking-tight">Pay Online with Razorpay</span>
+                      <span className="bg-amber-400 text-slate-950 font-black text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider">
+                        TEST MODE
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-300 max-w-lg leading-relaxed">
+                      Instant payment settlement with Credit/Debit Cards, UPI, Net Banking, and Wallets. Cryptographic HMAC-SHA256 signature verified securely on server.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    id="portal-razorpay-direct-btn"
+                    onClick={handlePayOnlineRazorpay}
+                    disabled={isInitiatingRazorpay}
+                    className="w-full md:w-auto px-6 py-3 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 active:scale-98 text-white font-extrabold text-sm rounded-xl shadow-lg transition flex items-center justify-center gap-2 cursor-pointer shrink-0 disabled:opacity-50"
+                  >
+                    <CreditCard className="w-4 h-4" />
+                    <span>{isInitiatingRazorpay ? 'Connecting...' : `Pay ₹${effectiveBalanceDue.toFixed(2)} Online`}</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
                 </div>
 
                 {/* Direct Mobile Pay CTA */}
@@ -930,6 +1019,30 @@ export const PublicInvoicePortalPage: React.FC<PublicInvoicePortalPageProps> = (
           </div>
         </div>
       )}
+
+      {/* Razorpay Test Mode Checkout Modal */}
+      <RazorpayCheckoutModal
+        isOpen={razorpayModalOpen}
+        orderData={razorpayOrderData}
+        onClose={() => setRazorpayModalOpen(false)}
+        onSuccess={(result) => {
+          const paidAmt = result.transaction?.amount || effectiveBalanceDue;
+          showToast(`Payment of ₹${paidAmt.toFixed(2)} verified via Razorpay! Invoice marked as Paid.`, 'success');
+          setCurrentOrder(prev => prev ? ({
+            ...prev,
+            advancePaid: (prev.advancePaid || 0) + paidAmt,
+            balanceDue: 0,
+            paymentStatus: 'PAID',
+            razorpayOrderId: result.transaction?.razorpayOrderId,
+            razorpayPaymentId: result.transaction?.referenceNumber || result.transaction?.razorpayPaymentId,
+            razorpayPaymentStatus: 'PAID',
+            razorpayPaidAt: new Date().toISOString()
+          }) : null);
+        }}
+        onFailure={(errMsg) => {
+          showToast(errMsg || 'Payment failed or was cancelled. Order remains unpaid.', 'error');
+        }}
+      />
     </div>
   );
 };

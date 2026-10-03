@@ -211,45 +211,53 @@ export const generatePieceTagsForOrder = (
   order: Order,
   businessSettings?: BusinessSettings
 ): PieceTagData[] => {
+  if (!order) return [];
+
   const tags: PieceTagData[] = [];
 
   const bizName = getEffectiveBusinessName(businessSettings);
   const bizPrefix = getBusinessPrefix(businessSettings);
-  const orderCode = `${bizPrefix}-${order.orderNumber.toString().padStart(3, '0')}`;
+  const orderNum = order.orderNumber || 1;
+  const orderCode = `${bizPrefix}-${orderNum.toString().padStart(3, '0')}`;
   const tagDeliveryDate = calculateTagDeliveryDate(order.dueDate);
 
-  let currentPieceIndex = 1;
-  const totalPiecesCount = order.totalPieces || order.items.reduce((sum, i) => sum + (i.quantity || 1), 0) || 1;
+  const rawItems = Array.isArray(order.items) ? order.items : [];
+  
+  // Calculate total individual pieces across all item quantities reliably
+  const calculatedItemsTotal = rawItems.reduce((sum, item) => sum + Math.max(1, Number(item.quantity) || 1), 0);
+  const totalPiecesCount = calculatedItemsTotal > 0 ? calculatedItemsTotal : Math.max(1, Number(order.totalPieces) || 1);
 
-  order.items.forEach((item, itemIdx) => {
-    const qty = Math.max(1, item.quantity || 1);
+  let currentPieceIndex = 1;
+
+  rawItems.forEach((item, itemIdx) => {
+    const qty = Math.max(1, Number(item.quantity) || 1);
 
     for (let q = 0; q < qty; q++) {
       const pieceIdx = currentPieceIndex;
       const clientCode = `CL-${pieceIdx}`;
-      const garmentCodePart = item.garmentCode || item.garmentName.slice(0, 3).toUpperCase();
+      const garmentCodePart = item.garmentCode || (item.garmentName || 'GAR').slice(0, 3).toUpperCase();
       
       // QR / Secret Payload explicitly encodes the dynamic business name so QR scanners and verification get the current company name
       const uniqueSecretCode = `${bizName} | ${orderCode} | ${clientCode} | ${garmentCodePart} | Due: ${tagDeliveryDate}`;
 
       tags.push({
-        id: `piece-${order.id}-${itemIdx}-${q}-${pieceIdx}`,
-        orderNumber: order.orderNumber,
-        orderId: order.id,
+        id: `piece-${order.id || 'ord'}-${itemIdx}-${q}-${pieceIdx}`,
+        orderNumber: orderNum,
+        orderId: order.id || `ord-${orderNum}`,
         businessName: bizName,
         code: orderCode,
         clientName: order.customerName || 'Valued Customer',
         clientCode: clientCode,
         pieceIndex: pieceIdx,
         totalPieces: totalPiecesCount,
-        crmDueDate: order.dueDate,
+        crmDueDate: order.dueDate || '',
         tagDeliveryDate: tagDeliveryDate,
-        garmentName: item.garmentName,
+        garmentName: item.garmentName || 'Garment Item',
         garmentCode: garmentCodePart,
         serviceName: item.serviceName || 'Dry Cleaning',
         serviceCode: item.serviceCode || 'DC',
         pressingMethod: item.pressingMethod || 'Iron Press',
-        barcode: item.barcode || `${order.orderNumber}-${itemIdx + 1}-2`,
+        barcode: item.barcode || `${orderNum}-${itemIdx + 1}-${q + 1}`,
         uniqueSecretCode: uniqueSecretCode,
         remarks: item.remarks,
         brand: item.brand,
@@ -343,17 +351,18 @@ export const generate2RMatrixSVG = (payload: string, size: number = 44): string 
  * Displays the dynamic business name configured by the admin.
  */
 export const renderPieceTagHtml = (tag: PieceTagData): string => {
-  const qrSvg = generate2RMatrixSVG(tag.uniqueSecretCode, 42);
+  const qrSvg = generate2RMatrixSVG(tag.uniqueSecretCode, 38);
 
   return `
     <div class="piece-tag-container" style="
-      width: 1.5in;
-      min-height: 1.12in;
-      max-height: 1.25in;
+      width: 38mm;
+      height: 28mm;
+      max-width: 38mm;
+      max-height: 28mm;
       box-sizing: border-box;
-      padding: 3px 4px 2px 4px;
-      border: 1.5px solid #000;
-      border-radius: 2px;
+      padding: 1mm 1.5mm 0.8mm 1.5mm;
+      border: 1px solid #000;
+      border-radius: 1px;
       background: #ffffff;
       color: #000000;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -362,7 +371,7 @@ export const renderPieceTagHtml = (tag: PieceTagData): string => {
       justify-content: space-between;
       page-break-inside: avoid;
       break-inside: avoid;
-      margin: 0 auto;
+      margin: 0;
       overflow: hidden;
     ">
       <!-- Top Row: Business Name & Order Code -->
@@ -370,17 +379,17 @@ export const renderPieceTagHtml = (tag: PieceTagData): string => {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        border-bottom: 1.5px solid #000;
-        padding-bottom: 1px;
-        margin-bottom: 2px;
+        border-bottom: 1px solid #000;
+        padding-bottom: 0.8px;
+        margin-bottom: 1px;
       ">
         <div style="
-          font-size: 8.5px;
+          font-size: 8px;
           font-weight: 900;
           text-transform: uppercase;
-          letter-spacing: 0.2px;
-          line-height: 1.1;
-          max-width: 0.85in;
+          letter-spacing: 0.1px;
+          line-height: 1;
+          max-width: 22mm;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -389,11 +398,11 @@ export const renderPieceTagHtml = (tag: PieceTagData): string => {
         </div>
         <div style="
           font-family: monospace;
-          font-size: 8.5px;
+          font-size: 8px;
           font-weight: 900;
           background: #000;
           color: #fff;
-          padding: 0 3px;
+          padding: 0 2.5px;
           border-radius: 1px;
           line-height: 1.1;
         ">
@@ -402,53 +411,53 @@ export const renderPieceTagHtml = (tag: PieceTagData): string => {
       </div>
 
       <!-- Main Body: Left Details + Right QR Code -->
-      <div style="display: flex; gap: 3px; align-items: flex-start; justify-content: space-between; flex: 1;">
+      <div style="display: flex; gap: 2px; align-items: flex-start; justify-content: space-between; flex: 1; min-height: 0;">
         <!-- Left Column: Client, Piece Code, Item, Delivery Date -->
-        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; font-size: 7.5px; line-height: 1.15;">
+        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; height: 100%; font-size: 7.2px; line-height: 1.15;">
           <!-- Client Name -->
           <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
             <span style="font-weight: 600; color: #333;">Client:</span>
-            <strong style="font-weight: 800; font-size: 8px; color: #000;"> ${tag.clientName}</strong>
+            <strong style="font-weight: 800; font-size: 7.5px; color: #000;"> ${tag.clientName}</strong>
           </div>
 
           <!-- Client / Piece Code -->
-          <div style="display: flex; align-items: baseline; gap: 2px; margin-top: 0.5px;">
+          <div style="display: flex; align-items: baseline; gap: 1.5px; margin-top: 0.5px;">
             <span style="font-weight: 600; color: #333;">Piece:</span>
             <span style="
               font-family: monospace;
               font-weight: 900;
-              font-size: 9px;
+              font-size: 8.5px;
               color: #000;
               background: #f0f0f0;
               border: 0.8px solid #000;
-              padding: 0 3px;
+              padding: 0 2px;
               border-radius: 1px;
               line-height: 1;
             ">
               ${tag.clientCode}
             </span>
-            <span style="font-size: 7px; color: #555; font-weight: bold;">
+            <span style="font-size: 6.5px; color: #555; font-weight: bold;">
               (${tag.pieceIndex}/${tag.totalPieces})
             </span>
           </div>
 
           <!-- Garment & Service -->
-          <div style="font-weight: 800; font-size: 7.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 0.5px;">
+          <div style="font-weight: 800; font-size: 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 0.5px;">
             ${tag.garmentName} • <span style="font-weight: 600;">${tag.serviceCode}</span>
           </div>
 
           <!-- Tag Delivery Date (ONE DAY EARLIER than CRM Delivery Date) -->
           <div style="
-            margin-top: 1px;
-            padding: 0.5px 2px;
+            margin-top: 0.5px;
+            padding: 0.5px 1.5px;
             background: #fff;
-            border-top: 1px dashed #444;
+            border-top: 0.8px dashed #444;
             display: flex;
             justify-content: space-between;
             align-items: center;
           ">
-            <span style="font-weight: 700; font-size: 6.8px; color: #222;">Delivery Date:</span>
-            <strong style="font-weight: 900; font-size: 8px; color: #000; letter-spacing: -0.2px;">
+            <span style="font-weight: 700; font-size: 6.5px; color: #222;">Delivery Date:</span>
+            <strong style="font-weight: 900; font-size: 7.5px; color: #000; letter-spacing: -0.2px;">
               ${tag.tagDeliveryDate}
             </strong>
           </div>
@@ -456,7 +465,7 @@ export const renderPieceTagHtml = (tag: PieceTagData): string => {
 
         <!-- Right Column: 2R Matrix Code -->
         <div style="
-          width: 44px;
+          width: 38px;
           display: flex;
           flex-direction: column;
           align-items: center;
@@ -464,7 +473,7 @@ export const renderPieceTagHtml = (tag: PieceTagData): string => {
           flex-shrink: 0;
         ">
           <div style="
-            padding: 1px;
+            padding: 0.5px;
             border: 0.8px solid #000;
             background: #fff;
             display: flex;
@@ -477,9 +486,10 @@ export const renderPieceTagHtml = (tag: PieceTagData): string => {
             font-family: monospace;
             font-size: 6px;
             font-weight: 900;
-            letter-spacing: 0.3px;
-            margin-top: 1px;
+            letter-spacing: 0.2px;
+            margin-top: 0.5px;
             color: #000;
+            line-height: 1;
           ">
             ${tag.clientCode}
           </div>
@@ -488,16 +498,17 @@ export const renderPieceTagHtml = (tag: PieceTagData): string => {
 
       <!-- Secret Trace Line -->
       <div style="
-        border-top: 0.6px solid #888;
-        margin-top: 1px;
-        padding-top: 0.5px;
+        border-top: 0.5px solid #888;
+        margin-top: 0.5px;
+        padding-top: 0.3px;
         display: flex;
         justify-content: space-between;
         font-family: monospace;
-        font-size: 5.5px;
+        font-size: 5px;
         color: #444;
+        line-height: 1;
       ">
-        <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 0.95in;">
+        <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 22mm;">
           ${tag.uniqueSecretCode}
         </span>
         <span>${tag.pressingMethod || 'Iron'}</span>
@@ -527,42 +538,80 @@ export const printPiece2RTags = (
 
   const bizName = getEffectiveBusinessName(businessSettings);
 
-  const tagsHtml = tagsToPrint.map((tag, idx) => `
+  const tagsHtml = tagsToPrint.map((tag) => `
     <div class="print-tag-wrapper">
       ${renderPieceTagHtml(tag)}
     </div>
-    ${layoutMode === 'THERMAL_ROLL' && idx !== tagsToPrint.length - 1 ? '<div class="page-break"></div>' : ''}
   `).join('');
 
-  const styles = `
+  const styles = layoutMode === 'THERMAL_ROLL' ? `
     @page {
-      size: ${layoutMode === 'THERMAL_ROLL' ? '1.5in 1.15in' : 'A4'};
-      margin: ${layoutMode === 'THERMAL_ROLL' ? '0mm' : '8mm'};
+      size: 38mm 28mm;
+      margin: 0;
     }
     html, body {
-      margin: 0;
-      padding: 0;
+      width: 38mm !important;
+      height: 28mm !important;
+      margin: 0 !important;
+      padding: 0 !important;
       background: #ffffff !important;
       color: #000000 !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    .print-tag-wrapper {
+      width: 38mm;
+      height: 28mm;
+      max-width: 38mm;
+      max-height: 28mm;
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      page-break-inside: avoid;
+      break-inside: avoid;
+      page-break-after: always;
+      break-after: page;
+      display: block;
+      overflow: hidden;
+    }
+    .print-tag-wrapper:last-child {
+      page-break-after: auto;
+      break-after: auto;
+    }
+  ` : `
+    @page {
+      size: A4;
+      margin: 8mm;
+    }
+    html, body {
+      margin: 0 !important;
+      padding: 0 !important;
+      background: #ffffff !important;
+      color: #000000 !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    body {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 3mm;
+      align-content: flex-start;
+      margin: 0;
+      padding: 0;
     }
     .print-tag-wrapper {
       display: inline-block;
-      margin: ${layoutMode === 'THERMAL_ROLL' ? '0' : '3mm'};
+      width: 38mm;
+      height: 28mm;
+      max-width: 38mm;
+      max-height: 28mm;
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
       page-break-inside: avoid;
       break-inside: avoid;
+      overflow: hidden;
     }
-    .page-break {
-      page-break-after: always;
-      break-after: page;
-    }
-    ${layoutMode === 'A4_SHEET_GRID' ? `
-      body {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 4mm;
-        align-content: flex-start;
-      }
-    ` : ''}
   `;
 
   return printHtmlContent(tagsHtml, {

@@ -161,6 +161,8 @@ export const DropScreen: React.FC = () => {
     businessSettings, 
     setThermalReceiptModalOpen,
     setQRTagPreviewModalOpen,
+    openGarmentTagModal,
+    setActiveTagOrder,
     setPriceCorrectionModalOpen,
     showToast,
     setActiveView,
@@ -828,6 +830,10 @@ export const DropScreen: React.FC = () => {
         setAdvanceDiffOption(null);
         setApplyAdjustment(true);
         
+        if (res.order) {
+          setActiveTagOrder(res.order);
+        }
+
         // Open thermal receipt modal automatically for immediate printing
         setThermalReceiptModalOpen(true);
       } else {
@@ -2938,7 +2944,77 @@ export const DropScreen: React.FC = () => {
               </button>
 
               <button
-                onClick={() => setQRTagPreviewModalOpen(true)}
+                onClick={() => {
+                  if (items.length === 0) {
+                    showToast('Please add garments to the order before previewing tags.', 'warning');
+                    return;
+                  }
+
+                  let formattedDueDate = new Date().toISOString().split('T')[0];
+                  try {
+                    if (selectedDueDate instanceof Date && !isNaN(selectedDueDate.getTime())) {
+                      formattedDueDate = selectedDueDate.toISOString().split('T')[0];
+                    }
+                  } catch {}
+
+                  const nextNum = editingOrder?.orderNumber || (Math.max(...orders.map(o => o.orderNumber), 0) + 1);
+
+                  const livePosOrder: Order = {
+                    id: editingOrder?.id || `pos-draft-${Date.now()}`,
+                    orderNumber: nextNum,
+                    branchCode: businessSettings.branchCode || 'TE02',
+                    orderSeries: editingOrder?.orderSeries || `*${nextNum}-2*`,
+                    orderType: orderType || 'PER_PIECES',
+                    customerId: selectedCustomer?.id || 'cust-pos',
+                    customerName: selectedCustomer?.name || 'Valued Customer',
+                    customerMobile: selectedCustomer?.mobile || '',
+                    customerAddress: selectedCustomer?.address || '',
+                    customerPlaceOfSupply: selectedCustomer?.placeOfSupply || '',
+                    items: items.map((item, idx) => ({
+                      ...item,
+                      id: item.id || `item-${nextNum}-${idx + 1}`,
+                      garmentSequence: idx + 1,
+                      barcode: item.barcode || `${nextNum}-${idx + 1}-2`,
+                      status: item.status || 'RECEIVED',
+                      quantity: Math.max(1, Number(item.quantity) || 1),
+                      basePrice: item.basePrice || 100,
+                      subServices: item.subServices || [],
+                      totalItemPrice: item.totalItemPrice || 100,
+                      remarks: item.remarks || [],
+                      pressingMethod: item.pressingMethod || DEFAULT_PRESSING_METHOD,
+                      category: item.category || 'MEN'
+                    })),
+                    totalPieces: totalPiecesCount,
+                    totalWeightKg: totalWeightKg,
+                    deliveryCharge: effectiveDeliveryCharge,
+                    hasDeliveryCharge: isDeliveryApplied,
+                    isPickAndDrop: pickAndDropType === 'DOORSTEP_PICK_DROP',
+                    pickAndDropType: pickAndDropType || 'COUNTER_WALKIN',
+                    grossAmount: itemsGrossAmount,
+                    discountAmount: calculatedDiscount,
+                    discountPercent: discountPercent,
+                    discountReason: discountReason || undefined,
+                    surchargeAmount: calculatedSurcharge,
+                    surchargeType: surchargeType,
+                    taxRatePercent: 0,
+                    taxAmount: 0,
+                    roundOff: roundOff,
+                    netAmount: roundedTotal,
+                    advancePaid: advancePaid,
+                    balanceDue: balanceDue,
+                    status: editingOrder?.status || 'RECEIVED',
+                    orderDate: editingOrder?.orderDate || new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+                    dueDate: formattedDueDate,
+                    workshopNotes: workshopNotes,
+                    deliveryNotes: deliveryNotes,
+                    payments: editingOrder?.payments || [],
+                    receiptUrl: editingOrder?.receiptUrl || '',
+                    createdBy: editingOrder?.createdBy || 'Staff',
+                    createdAt: editingOrder?.createdAt || new Date().toISOString()
+                  };
+
+                  openGarmentTagModal(livePosOrder);
+                }}
                 disabled={!pickAndDropType || items.length === 0}
                 title={
                   !pickAndDropType

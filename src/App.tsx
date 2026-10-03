@@ -54,6 +54,7 @@ const MainAppContent: React.FC = () => {
     setThermalReceiptModalOpen,
     isQRTagPreviewModalOpen,
     setQRTagPreviewModalOpen,
+    activeTagOrder,
     isSignatureModalOpen,
     setSignatureModalOpen,
     isPriceCorrectionModalOpen,
@@ -170,6 +171,7 @@ const MainAppContent: React.FC = () => {
       <GarmentTagPrintModal 
         isOpen={isQRTagPreviewModalOpen} 
         onClose={() => setQRTagPreviewModalOpen(false)} 
+        order={activeTagOrder}
       />
 
       <ThermalReceiptModal 

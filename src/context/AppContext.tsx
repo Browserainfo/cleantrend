@@ -139,6 +139,9 @@ interface AppContextType {
   isQRTagPreviewModalOpen: boolean;
   setQRTagPreviewModalOpen: (open: boolean) => void;
   setGarmentTagPrintModalOpen?: (open: boolean) => void;
+  activeTagOrder: Order | null;
+  setActiveTagOrder: (order: Order | null) => void;
+  openGarmentTagModal: (order?: Order | null) => void;
   catalog?: GarmentMaster[];
   isCustomerPortalOpen: boolean;
   setCustomerPortalOpen: (open: boolean) => void;
@@ -504,6 +507,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isWhatsAppSimulatorOpen, setWhatsAppSimulatorOpen] = useState<boolean>(false);
   const [isThermalReceiptModalOpen, setThermalReceiptModalOpen] = useState<boolean>(false);
   const [isQRTagPreviewModalOpen, setQRTagPreviewModalOpen] = useState<boolean>(false);
+  const [activeTagOrder, setActiveTagOrder] = useState<Order | null>(null);
+
+  const openGarmentTagModal = (order?: Order | null) => {
+    if (order) {
+      setActiveTagOrder(order);
+    }
+    setQRTagPreviewModalOpen(true);
+  };
   const [isCustomerPortalOpen, setCustomerPortalOpen] = useState<boolean>(false);
   const [isPriceCorrectionModalOpen, setPriceCorrectionModalOpen] = useState<boolean>(false);
   const [isSignatureModalOpen, setSignatureModalOpen] = useState<boolean>(false);
@@ -2279,6 +2290,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       isQRTagPreviewModalOpen,
       setQRTagPreviewModalOpen,
       setGarmentTagPrintModalOpen: setQRTagPreviewModalOpen,
+      activeTagOrder,
+      setActiveTagOrder,
+      openGarmentTagModal,
       catalog: garmentCatalog,
       isCustomerPortalOpen,
       setCustomerPortalOpen,

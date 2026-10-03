@@ -26,7 +26,7 @@ export const ProcessScreen: React.FC = () => {
     updateGarmentStatus,
     updateGarmentPressingMethod,
     showToast, 
-    setQRTagPreviewModalOpen,
+    openGarmentTagModal,
     setActiveOrderId,
     setActiveView 
   } = useApp();
@@ -143,7 +143,7 @@ export const ProcessScreen: React.FC = () => {
           )}
 
           <button
-            onClick={() => setQRTagPreviewModalOpen(true)}
+            onClick={() => openGarmentTagModal()}
             className="px-3.5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded font-bold text-xs flex items-center gap-1.5 shadow-xs transition"
           >
             <QrCode className="w-4 h-4 text-sky-400" />
