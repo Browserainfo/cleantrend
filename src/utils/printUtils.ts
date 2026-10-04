@@ -5,6 +5,8 @@ export interface PrintDocumentOptions {
   title?: string;
   styles?: string;
   targetWindow?: Window | null;
+  pageWidth?: string;
+  pageHeight?: string;
 }
 
 /**
@@ -27,12 +29,13 @@ export const printHtmlContent = (htmlContent: string, options: PrintDocumentOpti
     printIframe.id = iframeId;
     printIframe.name = iframeId;
     printIframe.style.position = 'fixed';
-    printIframe.style.left = '-9999px';
-    printIframe.style.top = '-9999px';
+    printIframe.style.left = '0';
+    printIframe.style.top = '0';
     printIframe.style.width = '100%';
     printIframe.style.height = '100%';
+    printIframe.style.zIndex = '-99999';
     printIframe.style.border = 'none';
-    printIframe.style.opacity = '0';
+    printIframe.style.opacity = '0.001';
     printIframe.style.pointerEvents = 'none';
 
     document.body.appendChild(printIframe);
@@ -60,6 +63,7 @@ export const printHtmlContent = (htmlContent: string, options: PrintDocumentOpti
         print-color-adjust: exact !important;
         color-adjust: exact !important;
       }
+      ${options.styles ? '' : `
       html, body {
         margin: 0;
         padding: 0;
@@ -69,6 +73,7 @@ export const printHtmlContent = (htmlContent: string, options: PrintDocumentOpti
         font-size: 11px;
         line-height: 1.3;
       }
+      `}
       .page-break {
         page-break-after: always;
         break-after: page;
@@ -105,6 +110,7 @@ export const printHtmlContent = (htmlContent: string, options: PrintDocumentOpti
       <html>
         <head>
           <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
           <title>${title}</title>
           <style>${defaultPrintCss}</style>
         </head>

@@ -58,7 +58,7 @@ export const GarmentTagPrintModal: React.FC<{
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [activePreviewTagId, setActivePreviewTagId] = useState<string>('');
   const [searchFilter, setSearchFilter] = useState<string>('');
-  const [layoutMode, setLayoutMode] = useState<'THERMAL_ROLL' | 'A4_SHEET_GRID'>('THERMAL_ROLL');
+  const [layoutMode, setLayoutMode] = useState<'MULTI_TAG' | 'THERMAL_ROLL'>('MULTI_TAG');
 
   // Initialize selection when order changes
   React.useEffect(() => {
@@ -434,9 +434,22 @@ export const GarmentTagPrintModal: React.FC<{
               <div className="bg-white p-2.5 rounded-lg border border-slate-200 text-xs space-y-1.5">
                 <label className="font-bold text-slate-700 text-[11px] flex items-center gap-1.5">
                   <Layers className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Print Media Layout:</span>
+                  <span>Tag Roll Format (38mm × 28mm):</span>
                 </label>
                 <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setLayoutMode('MULTI_TAG')}
+                    className={`p-2 rounded border text-left transition ${
+                      layoutMode === 'MULTI_TAG'
+                        ? 'bg-sky-50 border-sky-500 text-sky-950 font-bold'
+                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    <div className="text-xs">Multi Tag Roll</div>
+                    <div className="text-[10px] text-slate-500 font-normal">38mm × 28mm (All Selected)</div>
+                  </button>
+
                   <button
                     type="button"
                     onClick={() => setLayoutMode('THERMAL_ROLL')}
@@ -447,20 +460,7 @@ export const GarmentTagPrintModal: React.FC<{
                     }`}
                   >
                     <div className="text-xs">Thermal Tag Roll</div>
-                    <div className="text-[10px] text-slate-500 font-normal">1.5" × 1.12" Continuous</div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setLayoutMode('A4_SHEET_GRID')}
-                    className={`p-2 rounded border text-left transition ${
-                      layoutMode === 'A4_SHEET_GRID'
-                        ? 'bg-sky-50 border-sky-500 text-sky-950 font-bold'
-                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
-                    }`}
-                  >
-                    <div className="text-xs">Multi-Tag Sheet</div>
-                    <div className="text-[10px] text-slate-500 font-normal">A4 Sticker Label Grid</div>
+                    <div className="text-[10px] text-slate-500 font-normal">38mm × 28mm (Continuous)</div>
                   </button>
                 </div>
               </div>

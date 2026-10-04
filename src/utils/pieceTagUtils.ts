@@ -339,7 +339,7 @@ export const generate2RMatrixSVG = (payload: string, size: number = 44): string 
   }
 
   return `
-    <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg" style="display:block; image-rendering: pixelated; shape-rendering: crispEdges;">
+    <svg width="100%" height="100%" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg" style="display:block; width:100%; height:100%; image-rendering: pixelated; shape-rendering: crispEdges;">
       <rect width="${size}" height="${size}" fill="#fff" />
       ${rects}
     </svg>
@@ -348,10 +348,10 @@ export const generate2RMatrixSVG = (payload: string, size: number = 44): string 
 
 /**
  * Returns HTML string for an individual compact piece tag (1.5" x 1.12" / 38mm x 28mm).
- * Displays the dynamic business name configured by the admin.
+ * Formatted to fill the physical tag roll edge-to-edge with crisp typography and clear 2R code.
  */
 export const renderPieceTagHtml = (tag: PieceTagData): string => {
-  const qrSvg = generate2RMatrixSVG(tag.uniqueSecretCode, 38);
+  const qrSvg = generate2RMatrixSVG(tag.uniqueSecretCode, 42);
 
   return `
     <div class="piece-tag-container" style="
@@ -359,10 +359,12 @@ export const renderPieceTagHtml = (tag: PieceTagData): string => {
       height: 28mm;
       max-width: 38mm;
       max-height: 28mm;
+      min-width: 38mm;
+      min-height: 28mm;
       box-sizing: border-box;
-      padding: 1mm 1.5mm 0.8mm 1.5mm;
-      border: 1px solid #000;
-      border-radius: 1px;
+      padding: 0.8mm 1.2mm 0.6mm 1.2mm;
+      border: 0.8px solid #000;
+      border-radius: 0;
       background: #ffffff;
       color: #000000;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -379,17 +381,17 @@ export const renderPieceTagHtml = (tag: PieceTagData): string => {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        border-bottom: 1px solid #000;
-        padding-bottom: 0.8px;
-        margin-bottom: 1px;
+        border-bottom: 0.8px solid #000;
+        padding-bottom: 0.6px;
+        margin-bottom: 0.6px;
       ">
         <div style="
-          font-size: 8px;
+          font-size: 8.5px;
           font-weight: 900;
           text-transform: uppercase;
           letter-spacing: 0.1px;
-          line-height: 1;
-          max-width: 22mm;
+          line-height: 1.1;
+          max-width: 23mm;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -398,11 +400,11 @@ export const renderPieceTagHtml = (tag: PieceTagData): string => {
         </div>
         <div style="
           font-family: monospace;
-          font-size: 8px;
+          font-size: 8.5px;
           font-weight: 900;
           background: #000;
           color: #fff;
-          padding: 0 2.5px;
+          padding: 0.5px 2.5px;
           border-radius: 1px;
           line-height: 1.1;
         ">
@@ -411,53 +413,52 @@ export const renderPieceTagHtml = (tag: PieceTagData): string => {
       </div>
 
       <!-- Main Body: Left Details + Right QR Code -->
-      <div style="display: flex; gap: 2px; align-items: flex-start; justify-content: space-between; flex: 1; min-height: 0;">
+      <div style="display: flex; gap: 1.5mm; align-items: stretch; justify-content: space-between; flex: 1; min-height: 0;">
         <!-- Left Column: Client, Piece Code, Item, Delivery Date -->
-        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; height: 100%; font-size: 7.2px; line-height: 1.15;">
+        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; height: 100%; font-size: 7.5px; line-height: 1.15;">
           <!-- Client Name -->
           <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-            <span style="font-weight: 600; color: #333;">Client:</span>
-            <strong style="font-weight: 800; font-size: 7.5px; color: #000;"> ${tag.clientName}</strong>
+            <span style="font-weight: 600; color: #222; font-size: 7.5px;">Client:</span>
+            <strong style="font-weight: 900; font-size: 8px; color: #000;"> ${tag.clientName}</strong>
           </div>
 
-          <!-- Client / Piece Code -->
-          <div style="display: flex; align-items: baseline; gap: 1.5px; margin-top: 0.5px;">
-            <span style="font-weight: 600; color: #333;">Piece:</span>
+          <!-- Client / Piece Code Badge -->
+          <div style="display: flex; align-items: center; gap: 1.5px; margin-top: 0.4px;">
+            <span style="font-weight: 700; color: #222; font-size: 7.5px;">Piece:</span>
             <span style="
               font-family: monospace;
               font-weight: 900;
-              font-size: 8.5px;
-              color: #000;
-              background: #f0f0f0;
-              border: 0.8px solid #000;
-              padding: 0 2px;
+              font-size: 10.5px;
+              color: #fff;
+              background: #000;
+              padding: 0.2px 2.5px;
               border-radius: 1px;
               line-height: 1;
             ">
               ${tag.clientCode}
             </span>
-            <span style="font-size: 6.5px; color: #555; font-weight: bold;">
+            <span style="font-size: 7.5px; color: #222; font-weight: 800;">
               (${tag.pieceIndex}/${tag.totalPieces})
             </span>
           </div>
 
           <!-- Garment & Service -->
-          <div style="font-weight: 800; font-size: 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 0.5px;">
+          <div style="font-weight: 800; font-size: 7.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 0.4px;">
             ${tag.garmentName} • <span style="font-weight: 600;">${tag.serviceCode}</span>
           </div>
 
           <!-- Tag Delivery Date (ONE DAY EARLIER than CRM Delivery Date) -->
           <div style="
-            margin-top: 0.5px;
-            padding: 0.5px 1.5px;
+            margin-top: 0.4px;
+            padding-top: 0.4px;
             background: #fff;
             border-top: 0.8px dashed #444;
             display: flex;
             justify-content: space-between;
             align-items: center;
           ">
-            <span style="font-weight: 700; font-size: 6.5px; color: #222;">Delivery Date:</span>
-            <strong style="font-weight: 900; font-size: 7.5px; color: #000; letter-spacing: -0.2px;">
+            <span style="font-weight: 700; font-size: 7px; color: #222;">Tag Due:</span>
+            <strong style="font-weight: 900; font-size: 8px; color: #000; letter-spacing: -0.2px;">
               ${tag.tagDeliveryDate}
             </strong>
           </div>
@@ -465,7 +466,7 @@ export const renderPieceTagHtml = (tag: PieceTagData): string => {
 
         <!-- Right Column: 2R Matrix Code -->
         <div style="
-          width: 38px;
+          width: 13mm;
           display: flex;
           flex-direction: column;
           align-items: center;
@@ -473,21 +474,24 @@ export const renderPieceTagHtml = (tag: PieceTagData): string => {
           flex-shrink: 0;
         ">
           <div style="
-            padding: 0.5px;
+            width: 12.5mm;
+            height: 12.5mm;
+            padding: 0.4px;
             border: 0.8px solid #000;
             background: #fff;
             display: flex;
             align-items: center;
             justify-content: center;
+            box-sizing: border-box;
           ">
             ${qrSvg}
           </div>
           <div style="
             font-family: monospace;
-            font-size: 6px;
+            font-size: 7px;
             font-weight: 900;
             letter-spacing: 0.2px;
-            margin-top: 0.5px;
+            margin-top: 0.4px;
             color: #000;
             line-height: 1;
           ">
@@ -498,20 +502,21 @@ export const renderPieceTagHtml = (tag: PieceTagData): string => {
 
       <!-- Secret Trace Line -->
       <div style="
-        border-top: 0.5px solid #888;
-        margin-top: 0.5px;
-        padding-top: 0.3px;
+        border-top: 0.6px solid #666;
+        margin-top: 0.4px;
+        padding-top: 0.4px;
         display: flex;
         justify-content: space-between;
+        align-items: center;
         font-family: monospace;
-        font-size: 5px;
-        color: #444;
+        font-size: 5.5px;
+        color: #333;
         line-height: 1;
       ">
-        <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 22mm;">
+        <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 24mm;">
           ${tag.uniqueSecretCode}
         </span>
-        <span>${tag.pressingMethod || 'Iron'}</span>
+        <span style="font-weight: bold; color: #111;">${tag.pressingMethod || 'Iron'}</span>
       </div>
     </div>
   `;
@@ -519,12 +524,15 @@ export const renderPieceTagHtml = (tag: PieceTagData): string => {
 
 /**
  * Triggers the browser/system print dialog for all or selected piece tags.
+ * Formatted directly for small 38mm × 28mm (1.5" × 1.12") tag-roll paper.
+ * Works seamlessly for both Multi Tag (continuous roll of all selected pieces) and Thermal Tag (single/active piece).
+ * Each individual tag uses exactly 38mm × 28mm with no unwanted margins, no blank space, and no A4 scaling.
  */
 export const printPiece2RTags = (
   order: Order,
   businessSettings?: BusinessSettings,
   selectedPieceIds?: string[],
-  layoutMode: 'THERMAL_ROLL' | 'A4_SHEET_GRID' = 'THERMAL_ROLL'
+  layoutMode: string = 'THERMAL_ROLL'
 ): boolean => {
   const allTags = generatePieceTagsForOrder(order, businessSettings);
   const tagsToPrint = selectedPieceIds && selectedPieceIds.length > 0
@@ -538,84 +546,72 @@ export const printPiece2RTags = (
 
   const bizName = getEffectiveBusinessName(businessSettings);
 
+  // Wrap each tag in a page container with page break for multi-piece thermal printing
   const tagsHtml = tagsToPrint.map((tag) => `
     <div class="print-tag-wrapper">
       ${renderPieceTagHtml(tag)}
     </div>
   `).join('');
 
-  const styles = layoutMode === 'THERMAL_ROLL' ? `
+  const styles = `
     @page {
       size: 38mm 28mm;
-      margin: 0;
-    }
-    html, body {
-      width: 38mm !important;
-      height: 28mm !important;
       margin: 0 !important;
-      padding: 0 !important;
-      background: #ffffff !important;
-      color: #000000 !important;
-      -webkit-print-color-adjust: exact !important;
-      print-color-adjust: exact !important;
     }
-    .print-tag-wrapper {
-      width: 38mm;
-      height: 28mm;
-      max-width: 38mm;
-      max-height: 28mm;
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-      page-break-inside: avoid;
-      break-inside: avoid;
-      page-break-after: always;
-      break-after: page;
-      display: block;
-      overflow: hidden;
-    }
-    .print-tag-wrapper:last-child {
-      page-break-after: auto;
-      break-after: auto;
-    }
-  ` : `
-    @page {
-      size: A4;
-      margin: 8mm;
-    }
-    html, body {
-      margin: 0 !important;
-      padding: 0 !important;
-      background: #ffffff !important;
-      color: #000000 !important;
-      -webkit-print-color-adjust: exact !important;
-      print-color-adjust: exact !important;
-    }
-    body {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 3mm;
-      align-content: flex-start;
-      margin: 0;
-      padding: 0;
-    }
-    .print-tag-wrapper {
-      display: inline-block;
-      width: 38mm;
-      height: 28mm;
-      max-width: 38mm;
-      max-height: 28mm;
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-      page-break-inside: avoid;
-      break-inside: avoid;
-      overflow: hidden;
+    @media print {
+      @page {
+        size: 38mm 28mm;
+        margin: 0 !important;
+      }
+      *, *::before, *::after {
+        box-sizing: border-box !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      html, body {
+        width: 38mm !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #ffffff !important;
+        color: #000000 !important;
+      }
+      .print-tag-wrapper {
+        width: 38mm !important;
+        height: 28mm !important;
+        max-width: 38mm !important;
+        max-height: 28mm !important;
+        min-width: 38mm !important;
+        min-height: 28mm !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        page-break-after: always !important;
+        break-after: page !important;
+        display: block !important;
+        overflow: hidden !important;
+      }
+      .print-tag-wrapper:last-child {
+        page-break-after: auto !important;
+        break-after: auto !important;
+      }
+      .piece-tag-container {
+        width: 38mm !important;
+        height: 28mm !important;
+        max-width: 38mm !important;
+        max-height: 28mm !important;
+        min-width: 38mm !important;
+        min-height: 28mm !important;
+        margin: 0 !important;
+        overflow: hidden !important;
+      }
     }
   `;
 
   return printHtmlContent(tagsHtml, {
     title: `${bizName}-Piece-Tags-Order-${order.orderNumber}`,
-    styles: styles
+    styles: styles,
+    pageWidth: '38mm',
+    pageHeight: '28mm'
   });
 };
