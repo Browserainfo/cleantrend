@@ -256,7 +256,7 @@ export const generatePieceTagsForOrder = (
         garmentCode: garmentCodePart,
         serviceName: item.serviceName || 'Dry Cleaning',
         serviceCode: item.serviceCode || 'DC',
-        pressingMethod: item.pressingMethod || 'Iron Press',
+        pressingMethod: item.pressingMethod || 'Steam Press',
         barcode: item.barcode || `${orderNum}-${itemIdx + 1}-${q + 1}`,
         uniqueSecretCode: uniqueSecretCode,
         remarks: item.remarks,
@@ -415,50 +415,50 @@ export const renderPieceTagHtml = (tag: PieceTagData): string => {
       <!-- Main Body: Left Details + Right QR Code -->
       <div style="display: flex; gap: 1.5mm; align-items: stretch; justify-content: space-between; flex: 1; min-height: 0;">
         <!-- Left Column: Client, Piece Code, Item, Delivery Date -->
-        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; height: 100%; font-size: 7.5px; line-height: 1.15;">
-          <!-- Client Name -->
-          <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-            <span style="font-weight: 600; color: #222; font-size: 7.5px;">Client:</span>
-            <strong style="font-weight: 900; font-size: 8px; color: #000;"> ${tag.clientName}</strong>
+        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; height: 100%; font-size: 8px; line-height: 1.15;">
+          <!-- Client Name (Large & Clearly Readable) -->
+          <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2;">
+            <span style="font-weight: 700; color: #000; font-size: 8.5px;">Client:</span>
+            <strong style="font-weight: 900; font-size: 10px; color: #000; letter-spacing: -0.1px;"> ${tag.clientName}</strong>
           </div>
 
-          <!-- Client / Piece Code Badge -->
-          <div style="display: flex; align-items: center; gap: 1.5px; margin-top: 0.4px;">
-            <span style="font-weight: 700; color: #222; font-size: 7.5px;">Piece:</span>
+          <!-- Client / Piece Code Badge (Large & Prominent) -->
+          <div style="display: flex; align-items: center; gap: 2px; margin-top: 0.3px;">
+            <span style="font-weight: 800; color: #000; font-size: 8.5px;">Piece:</span>
             <span style="
               font-family: monospace;
               font-weight: 900;
-              font-size: 10.5px;
+              font-size: 12px;
               color: #fff;
               background: #000;
-              padding: 0.2px 2.5px;
+              padding: 0.5px 3.5px;
               border-radius: 1px;
               line-height: 1;
             ">
               ${tag.clientCode}
             </span>
-            <span style="font-size: 7.5px; color: #222; font-weight: 800;">
+            <span style="font-size: 9px; color: #000; font-weight: 900;">
               (${tag.pieceIndex}/${tag.totalPieces})
             </span>
           </div>
 
           <!-- Garment & Service -->
-          <div style="font-weight: 800; font-size: 7.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 0.4px;">
-            ${tag.garmentName} • <span style="font-weight: 600;">${tag.serviceCode}</span>
+          <div style="font-weight: 800; font-size: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 0.3px; color: #000;">
+            ${tag.garmentName} • <span style="font-weight: 700;">${tag.serviceCode}</span>
           </div>
 
-          <!-- Tag Delivery Date (ONE DAY EARLIER than CRM Delivery Date) -->
+          <!-- Tag Delivery Date (ONE DAY EARLIER than CRM Delivery Date - Slightly Increased) -->
           <div style="
-            margin-top: 0.4px;
+            margin-top: 0.3px;
             padding-top: 0.4px;
             background: #fff;
-            border-top: 0.8px dashed #444;
+            border-top: 0.8px dashed #000;
             display: flex;
             justify-content: space-between;
             align-items: center;
           ">
-            <span style="font-weight: 700; font-size: 7px; color: #222;">Tag Due:</span>
-            <strong style="font-weight: 900; font-size: 8px; color: #000; letter-spacing: -0.2px;">
+            <span style="font-weight: 800; font-size: 8px; color: #000;">Tag Due:</span>
+            <strong style="font-weight: 900; font-size: 9.5px; color: #000; letter-spacing: -0.1px;">
               ${tag.tagDeliveryDate}
             </strong>
           </div>
@@ -488,7 +488,7 @@ export const renderPieceTagHtml = (tag: PieceTagData): string => {
           </div>
           <div style="
             font-family: monospace;
-            font-size: 7px;
+            font-size: 7.5px;
             font-weight: 900;
             letter-spacing: 0.2px;
             margin-top: 0.4px;
@@ -500,23 +500,24 @@ export const renderPieceTagHtml = (tag: PieceTagData): string => {
         </div>
       </div>
 
-      <!-- Secret Trace Line -->
+      <!-- Secret Trace Line (Clearly Readable, Solid Black, Higher Weight & Size) -->
       <div style="
-        border-top: 0.6px solid #666;
-        margin-top: 0.4px;
-        padding-top: 0.4px;
+        border-top: 0.8px solid #000;
+        margin-top: 0.5px;
+        padding-top: 0.5px;
         display: flex;
         justify-content: space-between;
         align-items: center;
         font-family: monospace;
-        font-size: 5.5px;
-        color: #333;
-        line-height: 1;
+        font-size: 7.5px;
+        font-weight: 800;
+        color: #000;
+        line-height: 1.1;
       ">
-        <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 24mm;">
+        <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 24mm; letter-spacing: 0.2px;">
           ${tag.uniqueSecretCode}
         </span>
-        <span style="font-weight: bold; color: #111;">${tag.pressingMethod || 'Iron'}</span>
+        <span style="font-weight: 900; color: #000; text-transform: uppercase;">${tag.pressingMethod || 'Steam Press'}</span>
       </div>
     </div>
   `;

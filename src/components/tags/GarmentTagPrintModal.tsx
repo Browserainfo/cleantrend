@@ -339,30 +339,30 @@ export const GarmentTagPrintModal: React.FC<{
                       {/* Middle Details + 2R QR Matrix */}
                       <div className="flex items-start justify-between gap-1.5 flex-1">
                         {/* Text Fields */}
-                        <div className="flex-1 flex flex-col justify-between h-full text-[10px] leading-tight">
+                        <div className="flex-1 flex flex-col justify-between h-full text-[11px] leading-tight">
                           <div className="truncate">
-                            <span className="font-semibold text-slate-600">Client: </span>
-                            <strong className="font-extrabold text-black">{currentPreviewTag.clientName}</strong>
+                            <span className="font-bold text-black text-[11px]">Client: </span>
+                            <strong className="font-black text-black text-[13px]">{currentPreviewTag.clientName}</strong>
                           </div>
 
-                          <div className="flex items-baseline gap-1 mt-0.5">
-                            <span className="font-semibold text-slate-600">Piece: </span>
-                            <span className="font-mono font-black text-[11.5px] text-black bg-slate-100 border border-black px-1.5 py-0.2 rounded-xs">
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="font-extrabold text-black text-[11px]">Piece: </span>
+                            <span className="font-mono font-black text-[14px] text-white bg-black px-2 py-0.5 rounded-xs leading-none">
                               {currentPreviewTag.clientCode}
                             </span>
-                            <span className="text-[9.5px] font-bold text-slate-500">
+                            <span className="text-[11px] font-black text-black">
                               ({currentPreviewTag.pieceIndex}/{currentPreviewTag.totalPieces})
                             </span>
                           </div>
 
-                          <div className="font-extrabold text-[10px] text-black truncate mt-0.5">
+                          <div className="font-bold text-[10.5px] text-black truncate mt-0.5">
                             {currentPreviewTag.garmentName} • <span className="font-semibold">{currentPreviewTag.serviceCode}</span>
                           </div>
 
                           {/* Delivery Date Highlight */}
-                          <div className="mt-1 pt-0.5 border-t border-dashed border-slate-400 flex items-center justify-between">
-                            <span className="font-bold text-[9px] text-slate-700">Delivery Date:</span>
-                            <strong className="font-black text-[10.5px] text-black tracking-tight underline">
+                          <div className="mt-1 pt-0.5 border-t border-dashed border-black flex items-center justify-between">
+                            <span className="font-bold text-[10px] text-black">Tag Due:</span>
+                            <strong className="font-black text-[12px] text-black tracking-tight underline">
                               {currentPreviewTag.tagDeliveryDate}
                             </strong>
                           </div>
@@ -376,16 +376,16 @@ export const GarmentTagPrintModal: React.FC<{
                               __html: generate2RMatrixSVG(currentPreviewTag.uniqueSecretCode, 50)
                             }}
                           />
-                          <div className="font-mono font-black text-[8px] text-black mt-0.5 tracking-wider">
+                          <div className="font-mono font-black text-[9px] text-black mt-0.5 tracking-wider">
                             {currentPreviewTag.clientCode}
                           </div>
                         </div>
                       </div>
 
                       {/* Secret Code Tracking Footer */}
-                      <div className="border-t border-slate-400 pt-0.5 mt-1 flex items-center justify-between font-mono text-[7.5px] text-slate-600">
-                        <span className="truncate max-w-[130px]">{currentPreviewTag.uniqueSecretCode}</span>
-                        <span>{currentPreviewTag.pressingMethod || 'Iron'}</span>
+                      <div className="border-t-2 border-black pt-0.5 mt-1 flex items-center justify-between font-mono text-[9px] font-bold text-black">
+                        <span className="truncate max-w-[130px] font-extrabold">{currentPreviewTag.uniqueSecretCode}</span>
+                        <span className="uppercase font-black">{currentPreviewTag.pressingMethod || 'Steam Press'}</span>
                       </div>
                     </div>
                   </div>

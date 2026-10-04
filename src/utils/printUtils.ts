@@ -246,7 +246,7 @@ export const printThermalBookingReceipt = (
                 <td style="padding: 3px 0;">
                   <strong>${idx + 1}. ${item.garmentName}</strong>
                   <div style="font-size: 9px; color: #444; padding-left: 8px;">
-                    ${item.serviceName} • ${item.pressingMethod || 'Iron Press'} • Barcode: ${item.barcode}
+                    ${item.serviceName} • ${item.pressingMethod || 'Steam Press'} • Barcode: ${item.barcode}
                   </div>
                   ${item.brand ? `<div style="font-size: 9px; color: #222; padding-left: 8px;">Brand: ${item.brand}</div>` : ''}
                   ${item.remarks?.length ? `<div style="font-size: 9px; color: #555; font-style: italic; padding-left: 8px;">Remarks: ${item.remarks.join(', ')}</div>` : ''}

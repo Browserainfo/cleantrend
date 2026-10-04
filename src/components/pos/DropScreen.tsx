@@ -424,7 +424,7 @@ export const DropScreen: React.FC = () => {
   const handleAddGarment = (
     garment: GarmentMaster, 
     serviceCode: ServiceCode = selectedServiceTab, 
-    pressingMethod: PressingMethod = selectedServiceTab === 'SP' ? 'Steam Press' : selectedServiceTab === 'LD' ? 'Fold Only' : 'Iron Press'
+    pressingMethod: PressingMethod = selectedServiceTab === 'LD' ? 'Fold Only' : DEFAULT_PRESSING_METHOD
   ) => {
     const serviceDef = serviceDefinitions.find(s => s.code === serviceCode) || serviceDefinitions[0];
     const unitPrice = getGarmentPrice(garment, serviceCode);

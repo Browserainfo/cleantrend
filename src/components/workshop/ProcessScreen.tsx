@@ -272,7 +272,7 @@ export const ProcessScreen: React.FC = () => {
               <tbody className="divide-y divide-slate-100">
                 {filteredItems.map(item => {
                   const isChecked = selectedBarcodes.includes(item.barcode);
-                  const currentPressing = item.pressingMethod || 'Iron Press';
+                  const currentPressing = item.pressingMethod || DEFAULT_PRESSING_METHOD;
                   return (
                     <tr key={item.id} className={`hover:bg-slate-50/80 transition ${isChecked ? 'bg-sky-50/50' : ''}`}>
                       <td className="p-3 text-center">

@@ -82,7 +82,7 @@ export const OrderManagementScreen: React.FC = () => {
   const [newItemGarmentName, setNewItemGarmentName] = useState('');
   const [newItemCategory, setNewItemCategory] = useState('MEN');
   const [newItemService, setNewItemService] = useState('Dry Clean');
-  const [newItemPressing, setNewItemPressing] = useState('Iron Press');
+  const [newItemPressing, setNewItemPressing] = useState('Steam Press');
   const [newItemQty, setNewItemQty] = useState(1);
   const [newItemPrice, setNewItemPrice] = useState(0);
 
@@ -1066,12 +1066,12 @@ export const OrderManagementScreen: React.FC = () => {
                             {/* Pressing Method */}
                             <td className="py-2.5 px-3">
                               <select
-                                value={item.pressingMethod || 'Iron Press'}
+                                value={item.pressingMethod || 'Steam Press'}
                                 onChange={(e) => handleItemPressingChange(idx, e.target.value)}
                                 className="px-1.5 py-1 bg-white border border-slate-300 rounded text-xs font-semibold text-indigo-900"
                               >
-                                <option value="Iron Press">Iron Press</option>
                                 <option value="Steam Press">Steam Press</option>
+                                <option value="Iron Press">Iron Press</option>
                                 <option value="Hanger Pack">Hanger Pack</option>
                                 <option value="Fold Only">Fold Only</option>
                               </select>
