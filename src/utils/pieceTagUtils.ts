@@ -348,22 +348,22 @@ export const generate2RMatrixSVG = (payload: string, size: number = 44): string 
 
 /**
  * Returns HTML string for an individual compact piece tag (1.5" x 1.12" / 38mm x 28mm).
- * Formatted to fill the physical tag roll edge-to-edge with crisp typography and clear 2R code.
+ * Formatted for thermal label roll printing with straight/horizontal orientation,
+ * crisp lighter typography, zero line-wrapping for piece codes, and minimum paper waste.
  */
 export const renderPieceTagHtml = (tag: PieceTagData): string => {
-  const qrSvg = generate2RMatrixSVG(tag.uniqueSecretCode, 42);
+  const qrSvg = generate2RMatrixSVG(tag.uniqueSecretCode, 40);
 
   return `
     <div class="piece-tag-container" style="
       width: 38mm;
-      height: 28mm;
+      height: 27mm;
       max-width: 38mm;
-      max-height: 28mm;
+      max-height: 27mm;
       min-width: 38mm;
-      min-height: 28mm;
       box-sizing: border-box;
-      padding: 0.8mm 1.2mm 0.6mm 1.2mm;
-      border: 0.8px solid #000;
+      padding: 0.6mm 1mm 0.5mm 1mm;
+      border: 0.6px solid #000;
       border-radius: 0;
       background: #ffffff;
       color: #000000;
@@ -381,13 +381,13 @@ export const renderPieceTagHtml = (tag: PieceTagData): string => {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        border-bottom: 0.8px solid #000;
-        padding-bottom: 0.6px;
-        margin-bottom: 0.6px;
+        border-bottom: 0.6px solid #000;
+        padding-bottom: 0.5px;
+        margin-bottom: 0.5px;
       ">
         <div style="
-          font-size: 8.5px;
-          font-weight: 900;
+          font-size: 8px;
+          font-weight: 700;
           text-transform: uppercase;
           letter-spacing: 0.1px;
           line-height: 1.1;
@@ -400,65 +400,79 @@ export const renderPieceTagHtml = (tag: PieceTagData): string => {
         </div>
         <div style="
           font-family: monospace;
-          font-size: 8.5px;
-          font-weight: 900;
+          font-size: 8px;
+          font-weight: 700;
           background: #000;
           color: #fff;
-          padding: 0.5px 2.5px;
+          padding: 0.5px 2px;
           border-radius: 1px;
           line-height: 1.1;
+          white-space: nowrap;
         ">
           ${tag.code}
         </div>
       </div>
 
       <!-- Main Body: Left Details + Right QR Code -->
-      <div style="display: flex; gap: 1.5mm; align-items: stretch; justify-content: space-between; flex: 1; min-height: 0;">
+      <div style="display: flex; gap: 1.2mm; align-items: stretch; justify-content: space-between; flex: 1; min-height: 0;">
         <!-- Left Column: Client, Piece Code, Item, Delivery Date -->
-        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; height: 100%; font-size: 8px; line-height: 1.15;">
-          <!-- Client Name (Large & Clearly Readable) -->
-          <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2;">
-            <span style="font-weight: 700; color: #000; font-size: 8.5px;">Client:</span>
-            <strong style="font-weight: 900; font-size: 10px; color: #000; letter-spacing: -0.1px;"> ${tag.clientName}</strong>
+        <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; height: 100%; font-size: 7.5px; line-height: 1.15;">
+          <!-- Client Name (Readable, Crisp, Lighter Weight) -->
+          <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.15;">
+            <span style="font-weight: 600; color: #000; font-size: 8px;">Client:</span>
+            <strong style="font-weight: 700; font-size: 9.5px; color: #000;"> ${tag.clientName}</strong>
           </div>
 
-          <!-- Client / Piece Code Badge (Large & Prominent) -->
-          <div style="display: flex; align-items: center; gap: 2px; margin-top: 0.3px;">
-            <span style="font-weight: 800; color: #000; font-size: 8.5px;">Piece:</span>
+          <!-- Client / Piece Code Badge (Guaranteed 1 line, Never wraps/breaks) -->
+          <div style="
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            margin-top: 0.2px;
+            white-space: nowrap !important;
+            flex-wrap: nowrap !important;
+          ">
+            <span style="font-weight: 600; color: #000; font-size: 8px; flex-shrink: 0; white-space: nowrap !important;">Piece:</span>
             <span style="
               font-family: monospace;
-              font-weight: 900;
-              font-size: 12px;
+              font-weight: 700;
+              font-size: 10px;
               color: #fff;
               background: #000;
-              padding: 0.5px 3.5px;
+              padding: 0.5px 2.5px;
               border-radius: 1px;
               line-height: 1;
+              white-space: nowrap !important;
+              word-break: keep-all !important;
+              overflow-wrap: normal !important;
+              display: inline-block !important;
+              flex-shrink: 0 !important;
             ">
               ${tag.clientCode}
             </span>
-            <span style="font-size: 9px; color: #000; font-weight: 900;">
+            <span style="font-size: 8px; color: #000; font-weight: 600; white-space: nowrap !important; flex-shrink: 0;">
               (${tag.pieceIndex}/${tag.totalPieces})
             </span>
           </div>
 
           <!-- Garment & Service -->
-          <div style="font-weight: 800; font-size: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 0.3px; color: #000;">
-            ${tag.garmentName} • <span style="font-weight: 700;">${tag.serviceCode}</span>
+          <div style="font-weight: 600; font-size: 7.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 0.2px; color: #000;">
+            ${tag.garmentName} • <span>${tag.serviceCode}</span>
           </div>
 
-          <!-- Tag Delivery Date (ONE DAY EARLIER than CRM Delivery Date - Slightly Increased) -->
+          <!-- Tag Delivery Date (ONE DAY EARLIER than CRM Delivery Date) -->
           <div style="
-            margin-top: 0.3px;
-            padding-top: 0.4px;
+            margin-top: 0.2px;
+            padding-top: 0.3px;
             background: #fff;
-            border-top: 0.8px dashed #000;
+            border-top: 0.6px dashed #000;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            white-space: nowrap;
           ">
-            <span style="font-weight: 800; font-size: 8px; color: #000;">Tag Due:</span>
-            <strong style="font-weight: 900; font-size: 9.5px; color: #000; letter-spacing: -0.1px;">
+            <span style="font-weight: 600; font-size: 7.5px; color: #000;">Tag Due:</span>
+            <strong style="font-weight: 700; font-size: 9px; color: #000;">
               ${tag.tagDeliveryDate}
             </strong>
           </div>
@@ -466,7 +480,7 @@ export const renderPieceTagHtml = (tag: PieceTagData): string => {
 
         <!-- Right Column: 2R Matrix Code -->
         <div style="
-          width: 13mm;
+          width: 12.5mm;
           display: flex;
           flex-direction: column;
           align-items: center;
@@ -474,10 +488,10 @@ export const renderPieceTagHtml = (tag: PieceTagData): string => {
           flex-shrink: 0;
         ">
           <div style="
-            width: 12.5mm;
-            height: 12.5mm;
-            padding: 0.4px;
-            border: 0.8px solid #000;
+            width: 12mm;
+            height: 12mm;
+            padding: 0.3px;
+            border: 0.6px solid #000;
             background: #fff;
             display: flex;
             align-items: center;
@@ -488,36 +502,41 @@ export const renderPieceTagHtml = (tag: PieceTagData): string => {
           </div>
           <div style="
             font-family: monospace;
-            font-size: 7.5px;
-            font-weight: 900;
+            font-size: 7px;
+            font-weight: 700;
             letter-spacing: 0.2px;
-            margin-top: 0.4px;
+            margin-top: 0.3px;
             color: #000;
             line-height: 1;
+            white-space: nowrap !important;
+            word-break: keep-all !important;
           ">
             ${tag.clientCode}
           </div>
         </div>
       </div>
 
-      <!-- Secret Trace Line (Clearly Readable, Solid Black, Higher Weight & Size) -->
+      <!-- Secret Trace Line (Solid Black, Clear & Legible, Less Bloated) -->
       <div style="
-        border-top: 0.8px solid #000;
-        margin-top: 0.5px;
-        padding-top: 0.5px;
+        border-top: 0.6px solid #000;
+        margin-top: 0.4px;
+        padding-top: 0.4px;
         display: flex;
         justify-content: space-between;
         align-items: center;
         font-family: monospace;
-        font-size: 7.5px;
-        font-weight: 800;
+        font-size: 7px;
+        font-weight: 600;
         color: #000;
         line-height: 1.1;
+        white-space: nowrap;
       ">
-        <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 24mm; letter-spacing: 0.2px;">
+        <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 24mm; letter-spacing: 0.1px;">
           ${tag.uniqueSecretCode}
         </span>
-        <span style="font-weight: 900; color: #000; text-transform: uppercase;">${tag.pressingMethod || 'Steam Press'}</span>
+        <span style="font-weight: 700; color: #000; text-transform: uppercase; white-space: nowrap; margin-left: 2px;">
+          ${tag.pressingMethod || 'Steam Press'}
+        </span>
       </div>
     </div>
   `;
@@ -525,9 +544,11 @@ export const renderPieceTagHtml = (tag: PieceTagData): string => {
 
 /**
  * Triggers the browser/system print dialog for all or selected piece tags.
- * Formatted directly for small 38mm × 28mm (1.5" × 1.12") tag-roll paper.
- * Works seamlessly for both Multi Tag (continuous roll of all selected pieces) and Thermal Tag (single/active piece).
- * Each individual tag uses exactly 38mm × 28mm with no unwanted margins, no blank space, and no A4 scaling.
+ * Formatted directly for physical 38mm × 28mm (1.5" × 1.12") thermal tag-roll paper.
+ * - Forces portrait orientation so tags print straight/horizontal without 90-degree sideways rotation.
+ * - Enforces 27mm container height to strictly avoid subpixel overflow and prevent blank page skips.
+ * - Ensures minimal gap between tags with minimum paper waste.
+ * - Keeps CL-5 and all piece codes strictly on one line without breaking.
  */
 export const printPiece2RTags = (
   order: Order,
@@ -556,13 +577,15 @@ export const printPiece2RTags = (
 
   const styles = `
     @page {
-      size: 38mm 28mm;
+      size: 38mm 28mm portrait;
       margin: 0 !important;
+      padding: 0 !important;
     }
     @media print {
       @page {
-        size: 38mm 28mm;
+        size: 38mm 28mm portrait;
         margin: 0 !important;
+        padding: 0 !important;
       }
       *, *::before, *::after {
         box-sizing: border-box !important;
@@ -571,18 +594,20 @@ export const printPiece2RTags = (
       }
       html, body {
         width: 38mm !important;
+        height: auto !important;
         margin: 0 !important;
         padding: 0 !important;
         background: #ffffff !important;
         color: #000000 !important;
+        overflow: hidden !important;
+        -webkit-text-size-adjust: 100% !important;
       }
       .print-tag-wrapper {
         width: 38mm !important;
-        height: 28mm !important;
+        height: 27mm !important;
         max-width: 38mm !important;
-        max-height: 28mm !important;
+        max-height: 27mm !important;
         min-width: 38mm !important;
-        min-height: 28mm !important;
         margin: 0 !important;
         padding: 0 !important;
         page-break-inside: avoid !important;
@@ -591,20 +616,21 @@ export const printPiece2RTags = (
         break-after: page !important;
         display: block !important;
         overflow: hidden !important;
+        box-sizing: border-box !important;
       }
       .print-tag-wrapper:last-child {
-        page-break-after: auto !important;
-        break-after: auto !important;
+        page-break-after: avoid !important;
+        break-after: avoid !important;
       }
       .piece-tag-container {
         width: 38mm !important;
-        height: 28mm !important;
+        height: 27mm !important;
         max-width: 38mm !important;
-        max-height: 28mm !important;
+        max-height: 27mm !important;
         min-width: 38mm !important;
-        min-height: 28mm !important;
-        margin: 0 !important;
+        margin: 0 auto !important;
         overflow: hidden !important;
+        box-sizing: border-box !important;
       }
     }
   `;
