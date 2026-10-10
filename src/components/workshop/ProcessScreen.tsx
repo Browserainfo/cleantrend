@@ -322,6 +322,9 @@ export const ProcessScreen: React.FC = () => {
                                   : 'bg-indigo-50 text-indigo-900 border-indigo-300 font-bold'
                             }`}
                           >
+                            {currentPressing === 'Steam Press' && (
+                              <option value="Steam Press" disabled>Steam Press (Archived)</option>
+                            )}
                             {PRESSING_METHOD_OPTIONS.map(opt => (
                               <option key={opt} value={opt}>
                                 {opt}

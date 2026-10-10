@@ -1,4 +1,4 @@
-import { Order, BusinessSettings } from '../types';
+import { Order, BusinessSettings, DEFAULT_PRESSING_METHOD } from '../types';
 import { printHtmlContent } from './printUtils';
 
 export interface PieceTagData {
@@ -256,7 +256,7 @@ export const generatePieceTagsForOrder = (
         garmentCode: garmentCodePart,
         serviceName: item.serviceName || 'Dry Cleaning',
         serviceCode: item.serviceCode || 'DC',
-        pressingMethod: item.pressingMethod || 'Steam Press',
+        pressingMethod: item.pressingMethod || DEFAULT_PRESSING_METHOD,
         barcode: item.barcode || `${orderNum}-${itemIdx + 1}-${q + 1}`,
         uniqueSecretCode: uniqueSecretCode,
         remarks: item.remarks,
@@ -357,9 +357,7 @@ export const renderPieceTagHtml = (tag: PieceTagData): string => {
   return `
     <div class="piece-tag-container" style="
       width: 38mm;
-      height: 27mm;
       max-width: 38mm;
-      max-height: 27mm;
       min-width: 38mm;
       box-sizing: border-box;
       padding: 0.6mm 1mm 0.5mm 1mm;
@@ -370,10 +368,10 @@ export const renderPieceTagHtml = (tag: PieceTagData): string => {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
       display: flex;
       flex-direction: column;
-      justify-content: space-between;
+      gap: 0.5mm;
       page-break-inside: avoid;
       break-inside: avoid;
-      margin: 0;
+      margin: 0 auto;
       overflow: hidden;
     ">
       <!-- Top Row: Business Name & Order Code -->
@@ -383,7 +381,7 @@ export const renderPieceTagHtml = (tag: PieceTagData): string => {
         align-items: center;
         border-bottom: 0.6px solid #000;
         padding-bottom: 0.5px;
-        margin-bottom: 0.5px;
+        margin-bottom: 0.2px;
       ">
         <div style="
           font-size: 8px;
@@ -455,9 +453,9 @@ export const renderPieceTagHtml = (tag: PieceTagData): string => {
             </span>
           </div>
 
-          <!-- Garment & Service -->
-          <div style="font-weight: 600; font-size: 7.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 0.2px; color: #000;">
-            ${tag.garmentName} • <span>${tag.serviceCode}</span>
+          <!-- Service Display (Article name removed; if Dry Cleaning, shows only "DC") -->
+          <div style="font-weight: 700; font-size: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 0.2px; color: #000;">
+            <span>${(tag.serviceCode === 'DC' || (tag.serviceName && tag.serviceName.toLowerCase().includes('dry clean'))) ? 'DC' : (tag.serviceCode || tag.serviceName || '')}</span>
           </div>
 
           <!-- Tag Delivery Date (ONE DAY EARLIER than CRM Delivery Date) -->
@@ -519,7 +517,7 @@ export const renderPieceTagHtml = (tag: PieceTagData): string => {
       <!-- Secret Trace Line (Solid Black, Clear & Legible, Less Bloated) -->
       <div style="
         border-top: 0.6px solid #000;
-        margin-top: 0.4px;
+        margin-top: 0.2px;
         padding-top: 0.4px;
         display: flex;
         justify-content: space-between;
@@ -535,7 +533,7 @@ export const renderPieceTagHtml = (tag: PieceTagData): string => {
           ${tag.uniqueSecretCode}
         </span>
         <span style="font-weight: 700; color: #000; text-transform: uppercase; white-space: nowrap; margin-left: 2px;">
-          ${tag.pressingMethod || 'Steam Press'}
+          ${(tag.pressingMethod && tag.pressingMethod !== 'Steam Press') ? tag.pressingMethod : ''}
         </span>
       </div>
     </div>
@@ -544,10 +542,10 @@ export const renderPieceTagHtml = (tag: PieceTagData): string => {
 
 /**
  * Triggers the browser/system print dialog for all or selected piece tags.
- * Formatted directly for physical 38mm × 28mm (1.5" × 1.12") thermal tag-roll paper.
- * - Forces portrait orientation so tags print straight/horizontal without 90-degree sideways rotation.
- * - Enforces 27mm container height to strictly avoid subpixel overflow and prevent blank page skips.
- * - Ensures minimal gap between tags with minimum paper waste.
+ * Formatted directly for physical 38mm thermal tag-roll paper.
+ * - Prints continuously with minimal paper waste.
+ * - Eliminates large blank page gaps between tags: each tag is separated by a uniform small 2mm space.
+ * - Ensures straight/horizontal orientation without 90-degree sideways rotation.
  * - Keeps CL-5 and all piece codes strictly on one line without breaking.
  */
 export const printPiece2RTags = (
@@ -568,7 +566,7 @@ export const printPiece2RTags = (
 
   const bizName = getEffectiveBusinessName(businessSettings);
 
-  // Wrap each tag in a page container with page break for multi-piece thermal printing
+  // Wrap each tag in a container separated by a small 2mm gap (no blank page skips)
   const tagsHtml = tagsToPrint.map((tag) => `
     <div class="print-tag-wrapper">
       ${renderPieceTagHtml(tag)}
@@ -577,13 +575,15 @@ export const printPiece2RTags = (
 
   const styles = `
     @page {
-      size: 38mm 28mm portrait;
+      size: auto;
+      size: 38mm auto;
       margin: 0 !important;
       padding: 0 !important;
     }
     @media print {
       @page {
-        size: 38mm 28mm portrait;
+        size: auto;
+        size: 38mm auto;
         margin: 0 !important;
         padding: 0 !important;
       }
@@ -604,30 +604,23 @@ export const printPiece2RTags = (
       }
       .print-tag-wrapper {
         width: 38mm !important;
-        height: 27mm !important;
-        max-width: 38mm !important;
-        max-height: 27mm !important;
-        min-width: 38mm !important;
-        margin: 0 !important;
+        margin: 0 auto 2mm auto !important;
         padding: 0 !important;
         page-break-inside: avoid !important;
         break-inside: avoid !important;
-        page-break-after: always !important;
-        break-after: page !important;
+        page-break-after: avoid !important;
+        break-after: avoid !important;
         display: block !important;
-        overflow: hidden !important;
         box-sizing: border-box !important;
       }
       .print-tag-wrapper:last-child {
-        page-break-after: avoid !important;
-        break-after: avoid !important;
+        margin-bottom: 0 !important;
       }
       .piece-tag-container {
         width: 38mm !important;
-        height: 27mm !important;
         max-width: 38mm !important;
-        max-height: 27mm !important;
         min-width: 38mm !important;
+        height: auto !important;
         margin: 0 auto !important;
         overflow: hidden !important;
         box-sizing: border-box !important;
@@ -639,6 +632,6 @@ export const printPiece2RTags = (
     title: `${bizName}-Piece-Tags-Order-${order.orderNumber}`,
     styles: styles,
     pageWidth: '38mm',
-    pageHeight: '28mm'
+    pageHeight: 'auto'
   });
 };

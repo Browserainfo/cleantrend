@@ -258,7 +258,7 @@ export const GarmentTagPrintModal: React.FC<{
                           </span>
                         </div>
                         <div className="text-[10.5px] text-slate-500 flex items-center gap-2 mt-0.5">
-                          <span>{tag.serviceName} ({tag.pressingMethod || 'Iron'})</span>
+                          <span>{tag.serviceName}{tag.pressingMethod && tag.pressingMethod !== 'Steam Press' ? ` (${tag.pressingMethod})` : ''}</span>
                           <span>•</span>
                           <span className="text-sky-800 font-semibold font-mono text-[10px]">
                             Tag Due: {tag.tagDeliveryDate}
@@ -356,7 +356,11 @@ export const GarmentTagPrintModal: React.FC<{
                           </div>
 
                           <div className="font-bold text-[10.5px] text-black truncate mt-0.5">
-                            {currentPreviewTag.garmentName} • <span className="font-semibold">{currentPreviewTag.serviceCode}</span>
+                            <span className="font-black">
+                              {currentPreviewTag.serviceCode === 'DC' || currentPreviewTag.serviceName?.toLowerCase().includes('dry clean')
+                                ? 'DC'
+                                : (currentPreviewTag.serviceCode || currentPreviewTag.serviceName || '')}
+                            </span>
                           </div>
 
                           {/* Delivery Date Highlight */}
@@ -385,7 +389,11 @@ export const GarmentTagPrintModal: React.FC<{
                       {/* Secret Code Tracking Footer */}
                       <div className="border-t-2 border-black pt-0.5 mt-1 flex items-center justify-between font-mono text-[9px] font-bold text-black">
                         <span className="truncate max-w-[130px] font-extrabold">{currentPreviewTag.uniqueSecretCode}</span>
-                        <span className="uppercase font-black">{currentPreviewTag.pressingMethod || 'Steam Press'}</span>
+                        <span className="uppercase font-black">
+                          {currentPreviewTag.pressingMethod && currentPreviewTag.pressingMethod !== 'Steam Press'
+                            ? currentPreviewTag.pressingMethod
+                            : ''}
+                        </span>
                       </div>
                     </div>
                   </div>

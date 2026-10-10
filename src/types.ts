@@ -54,8 +54,8 @@ export interface GarmentMaster {
 }
 
 export type PressingMethod = 'Steam Press' | 'Iron Press' | 'Hand Press' | 'No Press' | 'Fold Only' | string;
-export const DEFAULT_PRESSING_METHOD: PressingMethod = 'Steam Press';
-export const PRESSING_METHOD_OPTIONS: string[] = ['Steam Press', 'Iron Press', 'Hand Press', 'No Press', 'Fold Only'];
+export const DEFAULT_PRESSING_METHOD: PressingMethod = 'Iron Press';
+export const PRESSING_METHOD_OPTIONS: string[] = ['Iron Press', 'Hand Press', 'No Press', 'Fold Only'];
 
 export interface SubServiceItem {
   code: ServiceCode;

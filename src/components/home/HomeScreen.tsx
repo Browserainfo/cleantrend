@@ -627,7 +627,7 @@ export const HomeScreen: React.FC = () => {
                               <span>{garment.garmentName} ({garment.serviceName})</span>
                             </div>
                             <div className="text-xs text-slate-600 mt-0.5">
-                              Belongs to <strong>Order #{order.orderNumber}</strong> ({order.customerName}) • Pressing: <strong>{garment.pressingMethod || 'Steam Press'}</strong>
+                              Belongs to <strong>Order #{order.orderNumber}</strong> ({order.customerName}){garment.pressingMethod && garment.pressingMethod !== 'Steam Press' ? <> • Pressing: <strong>{garment.pressingMethod}</strong></> : null}
                             </div>
                           </div>
 

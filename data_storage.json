@@ -530,7 +530,7 @@
       "avatarInitial": "A",
       "createdAt": "2026-09-09T13:00:22.960Z",
       "updatedAt": "2026-09-09T13:00:22.960Z",
-      "lastLoginAt": "2026-09-19T11:12:38.611Z"
+      "lastLoginAt": "2026-10-09T05:36:02.038Z"
     },
     {
       "id": "usr-manager-1",
@@ -549,7 +549,7 @@
       "avatarInitial": "R",
       "createdAt": "2026-09-09T13:00:22.960Z",
       "updatedAt": "2026-09-09T13:00:22.960Z",
-      "lastLoginAt": "2026-09-09T13:00:30.689Z"
+      "lastLoginAt": "2026-10-09T05:36:02.200Z"
     },
     {
       "id": "usr-manager-2",
@@ -598,6 +598,38 @@
       "username": "admin",
       "createdAt": "2026-09-19T11:12:38.611Z",
       "expiresAt": "2026-09-26T11:12:38.611Z"
+    },
+    "0de18e88f903f769c2b7b9990a493a75ce60749657f8fbb5237126c2b630f60c": {
+      "userId": "usr-admin-1",
+      "role": "ADMIN",
+      "username": "admin",
+      "createdAt": "2026-10-09T05:07:31.936Z",
+      "expiresAt": "2026-10-16T05:07:31.936Z"
+    },
+    "e9d9760ca1a8ee9cbc83c9cef1156ae55fa71598f710cd7513c11d910c2a6b6c": {
+      "userId": "usr-admin-1",
+      "role": "ADMIN",
+      "username": "admin",
+      "createdAt": "2026-10-09T05:36:02.038Z",
+      "expiresAt": "2026-10-16T05:36:02.038Z"
+    },
+    "2c1a68433ccb4d792dedc1c08c5f7c3c152c11f15cfc9b50e20a5d7b252d9ca4": {
+      "userId": "usr-manager-1",
+      "role": "MANAGER",
+      "username": "rajesh",
+      "createdAt": "2026-10-09T05:36:02.200Z",
+      "expiresAt": "2026-10-16T05:36:02.200Z"
     }
+  },
+  "articleUsageCounts": {
+    "capri": 1,
+    "kurta": 3,
+    "wash & steam iron (wsi) (wsi)": 6,
+    "men - t shirt": 1,
+    "men - jeans": 1,
+    "men - jacket": 1,
+    "women - saree": 1,
+    "men - shirt": 2,
+    "men - trouser": 2
   }
 }

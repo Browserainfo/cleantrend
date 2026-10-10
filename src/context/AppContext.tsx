@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { 
   User, 
   UserRole, 
@@ -175,6 +175,10 @@ interface AppContextType {
   hideToast: () => void;
   resetToDefaults: () => void;
   restoreBackupData: (backupData: any) => void;
+
+  // Smart Article Usage
+  articleUsageCounts: Record<string, number>;
+  recordArticleUsage: (articles: { name: string; quantity?: number }[]) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -401,7 +405,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
   }, []);
 
-  // Background synchronize orders with backend server database when authenticated
+  // Smart Article Usage counts (persisted in localStorage and synchronized with server)
+  const [articleUsageCounts, setArticleUsageCounts] = useState<Record<string, number>>(() => {
+    try {
+      const saved = localStorage.getItem('cleanera_article_usage_counts');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      // fallback
+    }
+    return {};
+  });
+
+  const recordArticleUsage = useCallback((articles: { name: string; quantity?: number }[]) => {
+    if (!articles || articles.length === 0) return;
+    setArticleUsageCounts(prev => {
+      const updated = { ...prev };
+      for (const item of articles) {
+        const key = (item.name || '').trim().toLowerCase();
+        if (key) {
+          updated[key] = (updated[key] || 0) + (item.quantity || 1);
+        }
+      }
+      try {
+        localStorage.setItem('cleanera_article_usage_counts', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+
+    // Also sync to backend server database (works for Admin, Manager, etc.)
+    fetch('/api/article-usage', {
+      method: 'POST',
+      headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ articles })
+    }).catch(err => {
+      console.warn('Article usage sync note:', err);
+    });
+  }, []);
+
+  // Background synchronize orders and article usage with backend server database when authenticated
   useEffect(() => {
     if (!isAuthenticated) return;
     fetch('/api/orders', {
@@ -418,6 +460,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               if (!map.has(o.id)) map.set(o.id, o);
             });
             return Array.from(map.values());
+          });
+        }
+        if (data.articleUsageCounts && typeof data.articleUsageCounts === 'object') {
+          setArticleUsageCounts(prev => {
+            const merged = { ...prev, ...data.articleUsageCounts };
+            try {
+              localStorage.setItem('cleanera_article_usage_counts', JSON.stringify(merged));
+            } catch (e) {}
+            return merged;
+          });
+        }
+      })
+      .catch(err => {
+        // Silent fallback
+      });
+
+    // Also fetch dedicated article usage endpoint
+    fetch('/api/article-usage', {
+      headers: getAuthHeaders(),
+      credentials: 'include'
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.usageCounts) {
+          setArticleUsageCounts(prev => {
+            const merged = { ...prev, ...data.usageCounts };
+            try {
+              localStorage.setItem('cleanera_article_usage_counts', JSON.stringify(merged));
+            } catch (e) {}
+            return merged;
           });
         }
       })
@@ -1310,7 +1382,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.warn('Safe notification dispatch encountered an error:', notifErr);
     }
 
-    // 5. Sync newly created order to backend server database
+    // 5. Track smart article usage for added garments
+    if (Array.isArray(newOrder.items) && newOrder.items.length > 0) {
+      recordArticleUsage(newOrder.items.map(it => ({ name: it.garmentName, quantity: it.quantity || 1 })));
+    }
+
+    // 6. Sync newly created order to backend server database
     fetch('/api/orders', {
       method: 'POST',
       headers: getAuthHeaders(),
@@ -2074,6 +2151,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       reason: `${authUserRole === 'ADMIN' ? 'Admin' : 'Manager'} updated order details`
     });
 
+    // Track smart article usage for added garments
+    if (Array.isArray(updatedOrder.items) && updatedOrder.items.length > 0) {
+      recordArticleUsage(updatedOrder.items.map(it => ({ name: it.garmentName, quantity: it.quantity || 1 })));
+    }
+
     fetch('/api/orders', {
       method: 'POST',
       headers: getAuthHeaders(),
@@ -2321,7 +2403,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       showToast,
       hideToast,
       resetToDefaults,
-      restoreBackupData
+      restoreBackupData,
+      articleUsageCounts,
+      recordArticleUsage
     }}>
       {children}
     </AppContext.Provider>

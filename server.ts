@@ -157,6 +157,7 @@ interface StorageData {
   settings: any;
   users: BackendUser[];
   sessions: Record<string, SessionData>;
+  articleUsageCounts: Record<string, number>;
 }
 
 // Initial Admin & Manager credentials
@@ -268,12 +269,32 @@ function loadDatabase(): StorageData {
         };
       });
 
+      const rawOrders = Array.isArray(parsed.orders) && parsed.orders.length > 0 ? parsed.orders : initialOrders;
+      const articleUsageCounts: Record<string, number> = (parsed.articleUsageCounts && typeof parsed.articleUsageCounts === 'object')
+        ? parsed.articleUsageCounts
+        : {};
+
+      // If no explicit counts stored yet, calculate initial baseline counts from existing saved orders
+      if (Object.keys(articleUsageCounts).length === 0 && Array.isArray(rawOrders)) {
+        for (const o of rawOrders) {
+          if (Array.isArray(o.items)) {
+            for (const item of o.items) {
+              const nameKey = (item.garmentName || '').trim().toLowerCase();
+              if (nameKey) {
+                articleUsageCounts[nameKey] = (articleUsageCounts[nameKey] || 0) + (item.quantity || 1);
+              }
+            }
+          }
+        }
+      }
+
       return {
-        orders: Array.isArray(parsed.orders) && parsed.orders.length > 0 ? parsed.orders : initialOrders,
+        orders: rawOrders,
         customers: Array.isArray(parsed.customers) && parsed.customers.length > 0 ? parsed.customers : initialCustomers,
         settings: parsed.settings || initialBusinessSettings,
         users,
-        sessions: parsed.sessions && typeof parsed.sessions === 'object' ? parsed.sessions : {}
+        sessions: parsed.sessions && typeof parsed.sessions === 'object' ? parsed.sessions : {},
+        articleUsageCounts
       };
     }
   } catch (err) {
@@ -284,7 +305,8 @@ function loadDatabase(): StorageData {
     customers: initialCustomers,
     settings: initialBusinessSettings,
     users: getInitialUsers(),
-    sessions: {}
+    sessions: {},
+    articleUsageCounts: {}
   };
 }
 
@@ -1439,7 +1461,30 @@ app.post('/api/settings', requireAuth, requireRole('ADMIN'), (req, res) => {
 
 // GET all orders - requires authenticated staff (Admin or Manager)
 app.get('/api/orders', requireAuth, (req, res) => {
-  res.json({ success: true, orders: db.orders });
+  res.json({ success: true, orders: db.orders, articleUsageCounts: db.articleUsageCounts || {} });
+});
+
+// GET article usage counts - accessible by all authenticated users (Admin, Manager, etc.)
+app.get('/api/article-usage', requireAuth, (req, res) => {
+  res.json({ success: true, usageCounts: db.articleUsageCounts || {} });
+});
+
+// POST article usage increments - accessible by all authenticated users (Admin, Manager, etc.)
+app.post('/api/article-usage', requireAuth, (req, res) => {
+  const { articles } = req.body || {};
+  if (!db.articleUsageCounts) db.articleUsageCounts = {};
+  if (Array.isArray(articles)) {
+    for (const item of articles) {
+      const name = typeof item === 'string' ? item : (item.name || item.garmentName);
+      const qty = typeof item === 'object' && item.quantity ? Number(item.quantity) : 1;
+      const key = (name || '').trim().toLowerCase();
+      if (key) {
+        db.articleUsageCounts[key] = (db.articleUsageCounts[key] || 0) + qty;
+      }
+    }
+    saveDatabase();
+  }
+  res.json({ success: true, usageCounts: db.articleUsageCounts });
 });
 
 // POST save/sync orders - requires authenticated staff (Admin or Manager)
@@ -1463,8 +1508,20 @@ app.post('/api/orders', requireAuth, (req, res) => {
   } else {
     db.orders.unshift(newOrder);
   }
+
+  // Smart Article Usage Tracking: whenever an article is actually added to a saved order, increase its usage count
+  if (!db.articleUsageCounts) db.articleUsageCounts = {};
+  if (Array.isArray(newOrder.items)) {
+    for (const item of newOrder.items) {
+      const nameKey = (item.garmentName || '').trim().toLowerCase();
+      if (nameKey) {
+        db.articleUsageCounts[nameKey] = (db.articleUsageCounts[nameKey] || 0) + (item.quantity || 1);
+      }
+    }
+  }
+
   saveDatabase();
-  res.json({ success: true, order: newOrder });
+  res.json({ success: true, order: newOrder, articleUsageCounts: db.articleUsageCounts });
 });
 
 // DELETE order - requires authenticated staff

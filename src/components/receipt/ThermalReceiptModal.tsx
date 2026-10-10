@@ -260,7 +260,7 @@ export const ThermalReceiptModal: React.FC<{ isOpen: boolean; onClose: () => voi
                     <span>{(Number(item.totalItemPrice) || 0).toFixed(2)}</span>
                   </div>
                   <div className="text-[9.5px] text-slate-700 pl-3 font-semibold">
-                    {item.serviceName} • <span className="text-indigo-900 font-extrabold">{item.pressingMethod || 'Steam Press'}</span>
+                    {item.serviceName}
                   </div>
                   {item.remarks && item.remarks.length > 0 && (
                     <div className="text-[9px] text-slate-500 italic pl-3">

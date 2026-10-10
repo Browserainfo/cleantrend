@@ -115,12 +115,12 @@ const MainAppContent: React.FC = () => {
 
   // 4. AUTHENTICATED CRM WORKSPACE
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col font-sans select-none antialiased text-slate-800">
+    <div className="h-screen bg-slate-100 flex flex-col font-sans select-none antialiased text-slate-800 overflow-hidden">
       {/* Top 8-Module Navigation Bar with Active Role & Logout */}
       <HeaderNav />
 
       {/* Primary Workspace Viewport */}
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main className="flex-1 flex flex-col overflow-hidden min-h-0">
         {activeView === 'HOME' && <HomeScreen />}
         {(activeView === 'CUSTOMER' || activeView === 'CUSTOMERS') && <CustomerScreen />}
         {(activeView === 'ORDERS' || activeView === 'ORDER_LIST' || activeView === 'ORDER_MANAGEMENT') && <OrderManagementScreen />}

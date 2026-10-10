@@ -82,7 +82,7 @@ export const OrderManagementScreen: React.FC = () => {
   const [newItemGarmentName, setNewItemGarmentName] = useState('');
   const [newItemCategory, setNewItemCategory] = useState('MEN');
   const [newItemService, setNewItemService] = useState('Dry Clean');
-  const [newItemPressing, setNewItemPressing] = useState('Steam Press');
+  const [newItemPressing, setNewItemPressing] = useState('Iron Press');
   const [newItemQty, setNewItemQty] = useState(1);
   const [newItemPrice, setNewItemPrice] = useState(0);
 
@@ -1015,7 +1015,6 @@ export const OrderManagementScreen: React.FC = () => {
                         <th className="py-2 px-3 w-8">#</th>
                         <th className="py-2 px-3">Garment Item</th>
                         <th className="py-2 px-3">Service</th>
-                        <th className="py-2 px-3">Pressing</th>
                         <th className="py-2 px-3 w-20 text-center">Qty</th>
                         <th className="py-2 px-3 w-24 text-right">Unit Price</th>
                         <th className="py-2 px-3 w-24 text-right">Total</th>
@@ -1060,20 +1059,6 @@ export const OrderManagementScreen: React.FC = () => {
                                 <option value="Laundry & Iron">Laundry & Iron</option>
                                 <option value="Starching">Starching</option>
                                 <option value="Wash & Fold">Wash & Fold</option>
-                              </select>
-                            </td>
-
-                            {/* Pressing Method */}
-                            <td className="py-2.5 px-3">
-                              <select
-                                value={item.pressingMethod || 'Steam Press'}
-                                onChange={(e) => handleItemPressingChange(idx, e.target.value)}
-                                className="px-1.5 py-1 bg-white border border-slate-300 rounded text-xs font-semibold text-indigo-900"
-                              >
-                                <option value="Steam Press">Steam Press</option>
-                                <option value="Iron Press">Iron Press</option>
-                                <option value="Hanger Pack">Hanger Pack</option>
-                                <option value="Fold Only">Fold Only</option>
                               </select>
                             </td>
 

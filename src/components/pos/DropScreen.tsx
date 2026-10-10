@@ -93,7 +93,7 @@ const WEIGHT_SERVICES = [
     shortName: 'Wash & Steam Iron',
     ratePerKg: 125,
     description: 'Hygienic wash + professional steam ironing (₹125 × Weight)',
-    defaultPressing: 'Steam Press',
+    defaultPressing: 'Iron Press',
     colorClass: 'text-amber-700',
     bgLightClass: 'bg-amber-50/70 border-amber-200',
     badgeBg: 'bg-amber-600 text-white'
@@ -115,7 +115,7 @@ const WEIGHT_SERVICES = [
     shortName: 'Woolen Laundry',
     ratePerKg: 110,
     description: 'Delicate woolens, winter wear & gentle tumble (₹110 × Weight)',
-    defaultPressing: 'Steam Press',
+    defaultPressing: 'Iron Press',
     colorClass: 'text-indigo-700',
     bgLightClass: 'bg-indigo-50/70 border-indigo-200',
     badgeBg: 'bg-indigo-600 text-white'
@@ -167,7 +167,9 @@ export const DropScreen: React.FC = () => {
     showToast,
     setActiveView,
     activeCustomerId,
-    setActiveCustomerId
+    setActiveCustomerId,
+    articleUsageCounts,
+    recordArticleUsage
   } = useApp();
 
   const editingOrder = useMemo(() => {
@@ -394,31 +396,55 @@ export const DropScreen: React.FC = () => {
       .reduce((sum, i) => sum + (i.quantity || 1), 0);
   };
 
-  // Filter garments for Per-Piece catalog view
+  // Filter garments for Per-Piece catalog view: Category + Search filter work together
   const hasServiceSpecificItems = activeCatalog.some(
     g => g.category.toUpperCase() === selectedCategory.toUpperCase() && g.serviceCode === selectedServiceTab
   );
 
   const filteredGarments = activeCatalog.filter(g => {
-    const q = garmentSearch.trim().toLowerCase();
-    const itemCode = (g.itemCode || g.code || '').toLowerCase();
-    const matchesSearch = q === '' || 
-      g.name.toLowerCase().includes(q) || 
-      itemCode.includes(q) ||
-      (g.service && g.service.toLowerCase().includes(q));
-    
-    if (q !== '') {
-      return matchesSearch;
-    }
-
+    // 1. Category filter: Selected category (e.g. MEN/WOMEN/KIDS) must remain strictly active
     const matchesCategory = g.category.toUpperCase() === selectedCategory.toUpperCase();
     if (!matchesCategory) return false;
 
-    if (hasServiceSpecificItems) {
-      return g.serviceCode === selectedServiceTab;
+    // 2. Service check if applicable
+    if (hasServiceSpecificItems && g.serviceCode && g.serviceCode !== selectedServiceTab) {
+      return false;
     }
+
+    // 3. Search query filter: Must match query if typed
+    const q = garmentSearch.trim().toLowerCase();
+    if (q !== '') {
+      const itemCode = (g.itemCode || g.code || '').toLowerCase();
+      const matchesSearch = 
+        g.name.toLowerCase().includes(q) || 
+        itemCode.includes(q) ||
+        (g.service && g.service.toLowerCase().includes(q));
+      if (!matchesSearch) return false;
+    }
+
     return true;
   });
+
+  // Smart Article Ordering: usage-based ordering with alphabetical fallback (highest usage at top)
+  const sortedGarments = useMemo(() => {
+    return [...filteredGarments].sort((a, b) => {
+      const nameA = (a.name || '').trim().toLowerCase();
+      const nameB = (b.name || '').trim().toLowerCase();
+      const codeA = (a.itemCode || a.code || '').trim().toLowerCase();
+      const codeB = (b.itemCode || b.code || '').trim().toLowerCase();
+      const idA = (a.id || '').trim().toLowerCase();
+      const idB = (b.id || '').trim().toLowerCase();
+
+      const countA = (articleUsageCounts[nameA] || 0) + (articleUsageCounts[codeA] || 0) + (articleUsageCounts[idA] || 0);
+      const countB = (articleUsageCounts[nameB] || 0) + (articleUsageCounts[codeB] || 0) + (articleUsageCounts[idB] || 0);
+
+      if (countB !== countA) {
+        return countB - countA; // Frequently used articles appear first automatically
+      }
+      // Fallback: alphabetical order
+      return (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' });
+    });
+  }, [filteredGarments, articleUsageCounts]);
 
   // Add Per-Piece Garment to Cart
   const handleAddGarment = (
@@ -814,6 +840,8 @@ export const DropScreen: React.FC = () => {
       } as any);
 
       if (res && res.success) {
+        // Increase usage counts for all articles added to this saved order
+        recordArticleUsage(items.map(it => ({ name: it.garmentName, quantity: it.quantity || 1 })));
         const orderNo = res.order?.orderNumber || 'New';
         showToast(`Order #${orderNo} successfully created for ${targetCustomer.name}!`, 'success');
         // Reset cart and draft inputs
@@ -1034,7 +1062,7 @@ export const DropScreen: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-slate-100 overflow-hidden select-none">
+    <div className="flex-1 flex flex-col bg-slate-100 overflow-hidden select-none min-h-0 h-full">
       {/* Top Header Bar */}
       <div className="bg-white border-b border-slate-200 px-4 py-2.5 flex flex-wrap items-center justify-between shadow-xs gap-2 shrink-0">
         <div className="flex items-center gap-3">
@@ -1112,10 +1140,10 @@ export const DropScreen: React.FC = () => {
       )}
 
       {/* Main 3-Column POS Workspace */}
-      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden p-3 gap-3">
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden p-3 gap-3 min-h-0 h-full">
         
         {/* Left Column: Customer & Mode Selection */}
-        <div className="w-full lg:w-[300px] xl:w-[320px] flex flex-col gap-3 shrink-0 overflow-y-auto">
+        <div className="w-full lg:w-[300px] xl:w-[320px] flex flex-col gap-3 shrink-0 overflow-y-auto min-h-0 h-full">
           
           {/* STEP 1: Customer Selector Card */}
           <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-xs flex flex-col gap-2">
@@ -1328,7 +1356,7 @@ export const DropScreen: React.FC = () => {
         </div>
 
         {/* Center Column: Visual Garment Catalog (Full Height Workspace) */}
-        <div className="flex-1 bg-white rounded-lg border border-slate-200 shadow-xs flex flex-col overflow-hidden">
+        <div className="flex-1 bg-white rounded-lg border border-slate-200 shadow-xs flex flex-col overflow-hidden min-h-0 h-full">
           
           {/* ============================================================ */}
           {/* 1. ORDER PER PIECE CATALOG (Screenshots 1 & 2)              */}
@@ -1341,7 +1369,7 @@ export const DropScreen: React.FC = () => {
                 {/* Category Sub-Tabs (Men, Women, Kids, Household, Institutional, Others, Eco Wash) */}
                 <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
                   {CATEGORY_TABS.map(cat => {
-                    const isSelected = selectedCategory === cat.id && garmentSearch.trim() === '';
+                    const isSelected = selectedCategory === cat.id;
                     const IconComp = cat.icon;
                     return (
                       <button
@@ -1349,7 +1377,6 @@ export const DropScreen: React.FC = () => {
                         type="button"
                         onClick={() => {
                           setSelectedCategory(cat.id);
-                          setGarmentSearch('');
                         }}
                         className={`px-2.5 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 whitespace-nowrap transition ${
                           isSelected
@@ -1388,9 +1415,9 @@ export const DropScreen: React.FC = () => {
 
               {/* VISUAL GARMENT CARDS GRID (Takes full flexible space) */}
               <div className="flex-1 p-3 overflow-y-auto bg-slate-50/60">
-                {filteredGarments.length > 0 ? (
+                {sortedGarments.length > 0 ? (
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2.5">
-                    {filteredGarments.map(garment => {
+                    {sortedGarments.map(garment => {
                       const price = getGarmentPrice(garment, selectedServiceTab);
                       const cartCount = getGarmentCartCount(garment.name);
 
@@ -1812,7 +1839,7 @@ export const DropScreen: React.FC = () => {
         {/* ============================================================ */}
         {/* Right Column: ORDER ITEMS PANEL + Price & Settle Summary     */}
         {/* ============================================================ */}
-        <div className="w-full lg:w-[380px] xl:w-[420px] bg-white rounded-lg border border-slate-200 shadow-xs flex flex-col overflow-hidden shrink-0">
+        <div className="w-full lg:w-[380px] xl:w-[420px] bg-white rounded-lg border border-slate-200 shadow-xs flex flex-col overflow-hidden shrink-0 h-full min-h-0">
           
           {/* Header with Live Counter and Clear All */}
           <div className="p-2.5 border-b border-slate-200 bg-slate-900 text-white flex items-center justify-between shrink-0">
@@ -1841,7 +1868,7 @@ export const DropScreen: React.FC = () => {
           </div>
 
           {/* Scrollable Container containing: 1. Order Items List, 2. Financial Breakdown */}
-          <div className="flex-1 overflow-y-auto flex flex-col divide-y divide-slate-200">
+          <div className="flex-1 overflow-y-auto flex flex-col divide-y divide-slate-200 min-h-0">
             
             {/* 1. ORDER ITEMS LIST (Immediately shows any added garment with Editable Qty & Unit Price) */}
             <div className="p-2.5 space-y-2 bg-slate-50/70">
@@ -2017,6 +2044,9 @@ export const DropScreen: React.FC = () => {
                                   onChange={(e) => handleChangePressingMethod(idx, e.target.value as PressingMethod)}
                                   className="p-1 bg-white border border-slate-300 rounded text-xs font-semibold text-slate-800 outline-none focus:ring-1 focus:ring-sky-500"
                                 >
+                                  {item.pressingMethod === 'Steam Press' && (
+                                    <option value="Steam Press" disabled>Steam Press (Archived)</option>
+                                  )}
                                   {PRESSING_METHOD_OPTIONS.map(opt => (
                                     <option key={opt} value={opt}>{opt}</option>
                                   ))}

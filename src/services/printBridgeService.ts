@@ -863,7 +863,7 @@ class PrintBridgeService {
                   <div class="details-col">
                     <div class="garment-title">${item.garmentName}</div>
                     <div style="font-weight: bold; font-size: 11px;">Service: ${item.serviceName}</div>
-                    <div>Pressing: <span class="pressing-badge">${item.pressingMethod || 'Steam Press'}</span></div>
+                    ${(item.pressingMethod && item.pressingMethod !== 'Steam Press') ? `<div>Pressing: <span class="pressing-badge">${item.pressingMethod}</span></div>` : ''}
                     <div style="margin-top: 2px;">Cust: <strong>${order.customerName}</strong></div>
                     <div style="font-size: 10px; color: #333;">Mob: ${order.customerMobile}</div>
                   </div>
@@ -1016,7 +1016,7 @@ class PrintBridgeService {
                 <tr>
                   <td style="padding: 2px 0;">
                     <strong>${i + 1}. ${it.garmentName}</strong> (x${it.quantity})
-                    <div style="font-size: 9px; color: #333;">${it.serviceName} • ${it.pressingMethod || 'Steam Press'}</div>
+                    <div style="font-size: 9px; color: #333;">${it.serviceName}</div>
                   </td>
                   <td style="text-align: right; vertical-align: top; padding: 2px 0; font-weight: bold;">
                     ${(it.totalItemPrice * it.quantity).toFixed(2)}
