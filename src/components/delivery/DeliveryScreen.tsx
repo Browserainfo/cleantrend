@@ -109,10 +109,11 @@ export const DeliveryScreen: React.FC = () => {
 
     const query = barcodeInput.trim();
     // Match against items
-    const matched = order.items.find(i => 
-      i.barcode.toLowerCase() === query.toLowerCase() || 
-      i.barcode.replace(/-/g, '') === query.replace(/-/g, '')
-    );
+    const matched = order.items.find(i => {
+      const bc = i.barcode || '';
+      return bc.toLowerCase() === query.toLowerCase() || 
+             bc.replace(/-/g, '') === query.replace(/-/g, '');
+    });
 
     if (matched) {
       if (!selectedBarcodes.includes(matched.barcode)) {

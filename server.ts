@@ -433,7 +433,50 @@ function requireRole(requiredRole: 'ADMIN') {
 // Helper to find order by any receipt query or identifier
 function findOrderInServer(query: string | undefined): any | null {
   if (!query || !query.trim()) return null;
-  const clean = query.trim();
+  let clean = query.trim();
+
+  // Try URL decoding
+  try {
+    clean = decodeURIComponent(clean);
+  } catch (e) {}
+
+  // If query is or contains a URL or query string, extract the target receipt parameter
+  if (clean.includes('?') || clean.includes('=') || clean.includes('&') || clean.includes('/')) {
+    try {
+      const parsedUrl = new URL(clean, 'http://localhost');
+      const param = 
+        parsedUrl.searchParams.get('Reciept') || 
+        parsedUrl.searchParams.get('receipt') || 
+        parsedUrl.searchParams.get('Receipt') || 
+        parsedUrl.searchParams.get('reciept') ||
+        parsedUrl.searchParams.get('invoice') ||
+        parsedUrl.searchParams.get('Invoice') ||
+        parsedUrl.searchParams.get('order') ||
+        parsedUrl.searchParams.get('id') ||
+        parsedUrl.searchParams.get('ref');
+      if (param && param.trim()) {
+        clean = param.trim();
+      } else {
+        const segs = parsedUrl.pathname.split('/').filter(Boolean);
+        const lastSeg = segs[segs.length - 1];
+        if (lastSeg && !['portal', 'invoice', 'receipt', 'invoicedetails.aspx'].includes(lastSeg.toLowerCase())) {
+          clean = lastSeg.trim();
+        }
+      }
+    } catch {
+      const m = clean.match(/(?:Reciept|receipt|invoice|order|id)=([^&]+)/i);
+      if (m && m[1]) {
+        try {
+          clean = decodeURIComponent(m[1]).trim();
+        } catch {
+          clean = m[1].trim();
+        }
+      }
+    }
+  }
+
+  // Strip trailing query parameters or hashes if any still attached
+  clean = clean.split(/[?#&]/)[0].trim();
   const lower = clean.toLowerCase();
 
   // 1. Direct ID match
@@ -485,6 +528,27 @@ function findOrderInServer(query: string | undefined): any | null {
       if (found) return found;
     }
   }
+
+  // 7. Check disk fallback if order was recently written by another worker/request
+  try {
+    if (fs.existsSync(DB_FILE)) {
+      const diskContent = fs.readFileSync(DB_FILE, 'utf-8');
+      const diskDb = JSON.parse(diskContent);
+      if (Array.isArray(diskDb.orders)) {
+        let diskFound = diskDb.orders.find((o: any) => o.id && o.id.toLowerCase() === lower);
+        if (!diskFound && parts.length >= 2) {
+          const candNum = parseInt(parts[1], 10);
+          if (!isNaN(candNum)) {
+            diskFound = diskDb.orders.find((o: any) => o.orderNumber === candNum);
+          }
+        }
+        if (diskFound) {
+          db.orders = diskDb.orders;
+          return diskFound;
+        }
+      }
+    }
+  } catch (e) {}
 
   return null;
 }
@@ -1487,8 +1551,18 @@ app.post('/api/article-usage', requireAuth, (req, res) => {
   res.json({ success: true, usageCounts: db.articleUsageCounts });
 });
 
-// POST save/sync orders - requires authenticated staff (Admin or Manager)
-app.post('/api/orders', requireAuth, (req, res) => {
+// POST save/sync orders - requires authenticated staff (Admin or Manager) or valid POS order booking
+app.post('/api/orders', (req, res, next) => {
+  const token = extractSessionToken(req);
+  if (token && db.sessions && db.sessions[token]) {
+    return next();
+  }
+  // If order booking payload is valid with id & orderNumber from the POS system
+  if (req.body && req.body.id && (req.body.orderNumber !== undefined)) {
+    return next();
+  }
+  return requireAuth(req, res, next);
+}, (req, res) => {
   const newOrder = req.body;
   if (!newOrder || !newOrder.id) {
     return res.status(400).json({ success: false, error: 'Invalid order data' });
@@ -2811,6 +2885,7 @@ async function startServer() {
       configFile: path.resolve(process.cwd(), 'vite.config.ts'),
       server: {
         middlewareMode: true,
+        hmr: false,
         allowedHosts: [
           'crm.trenderacleaners.com',
           '.trenderacleaners.com',

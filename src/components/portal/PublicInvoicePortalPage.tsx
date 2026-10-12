@@ -29,7 +29,7 @@ import {
 import { Order, PaymentTransaction, BusinessSettings } from '../../types';
 import { printThermalBookingReceipt } from '../../utils/printUtils';
 import { numberToIndianWords } from '../../utils/currencyUtils';
-import { fetchInvoiceFromServer, findOrderFromReceiptQuery } from '../../utils/portalUrlUtils';
+import { fetchInvoiceFromServer, findOrderFromReceiptQuery, extractReceiptQueryFromUrlString } from '../../utils/portalUrlUtils';
 import { generateOrderUpiQr } from '../../utils/upiQrUtils';
 import { updateDocumentFavicon } from '../../utils/faviconUtils';
 import { RazorpayOrderResponse, launchRazorpayPaymentFlow } from '../../utils/razorpayClient';
@@ -136,11 +136,12 @@ export const PublicInvoicePortalPage: React.FC<PublicInvoicePortalPageProps> = (
     let isMounted = true;
 
     async function loadInvoice() {
-      if (invalidQuery) {
+      const effectiveQuery = invalidQuery || (typeof window !== 'undefined' ? extractReceiptQueryFromUrlString(window.location.href) : null);
+      if (effectiveQuery) {
         setIsLoading(true);
         try {
           // 1. Try fetching from server API endpoint
-          const serverData = await fetchInvoiceFromServer(invalidQuery);
+          const serverData = await fetchInvoiceFromServer(effectiveQuery);
           if (isMounted && serverData && serverData.order) {
             setCurrentOrder(serverData.order);
             if (serverData.settings) {
@@ -156,7 +157,7 @@ export const PublicInvoicePortalPage: React.FC<PublicInvoicePortalPageProps> = (
 
         // 2. Client context fallback
         if (isMounted) {
-          const fallback = findOrderFromReceiptQuery(invalidQuery, contextOrders);
+          const fallback = findOrderFromReceiptQuery(effectiveQuery, contextOrders);
           if (fallback) {
             setCurrentOrder(fallback);
           } else {

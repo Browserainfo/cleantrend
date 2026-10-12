@@ -13,6 +13,59 @@
     <meta property="og:description" content="Comprehensive CRM and operations management platform for Trendera Dry Cleaners, featuring secure authentication, role-based anti-fraud controls, and end-to-end garment workflow tracking." />
     <script>
       (function() {
+        // Intercept WebSocket creation for Vite dev HMR to suppress connection errors in sandboxed preview iframe
+        if (typeof window !== 'undefined' && window.WebSocket) {
+          var OrigWebSocket = window.WebSocket;
+          var CustomWebSocket = function(url, protocols) {
+            try {
+              var ws = protocols !== undefined ? new OrigWebSocket(url, protocols) : new OrigWebSocket(url);
+              ws.addEventListener('error', function(e) {
+                if (e && e.stopImmediatePropagation) e.stopImmediatePropagation();
+              }, true);
+              return ws;
+            } catch (err) {
+              return {
+                addEventListener: function() {},
+                removeEventListener: function() {},
+                send: function() {},
+                close: function() {},
+                readyState: 3
+              };
+            }
+          };
+          CustomWebSocket.prototype = OrigWebSocket.prototype;
+          CustomWebSocket.CONNECTING = OrigWebSocket.CONNECTING;
+          CustomWebSocket.OPEN = OrigWebSocket.OPEN;
+          CustomWebSocket.CLOSING = OrigWebSocket.CLOSING;
+          CustomWebSocket.CLOSED = OrigWebSocket.CLOSED;
+          window.WebSocket = CustomWebSocket;
+        }
+
+        // Global unhandled error suppression for Vite development transport
+        var origOnError = window.onerror;
+        window.onerror = function(msg, url, line, col, error) {
+          if ((url && String(url).indexOf('@vite/client') !== -1) || (msg && (String(msg).indexOf('WebSocket') !== -1 || String(msg).indexOf('moduleRunner') !== -1))) {
+            return true;
+          }
+          if (origOnError) return origOnError.apply(this, arguments);
+          return false;
+        };
+
+        window.addEventListener('error', function(e) {
+          if (e && ((e.message && (e.message.indexOf('WebSocket') !== -1 || e.message.indexOf('moduleRunner') !== -1)) || (e.filename && e.filename.indexOf('@vite/client') !== -1))) {
+            if (e.preventDefault) e.preventDefault();
+            if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+          }
+        }, true);
+
+        window.addEventListener('unhandledrejection', function(e) {
+          if (e && e.reason && (String(e.reason).indexOf('WebSocket') !== -1 || String(e.reason).indexOf('moduleRunner') !== -1 || String(e.reason).indexOf('@vite/client') !== -1)) {
+            if (e.preventDefault) e.preventDefault();
+            if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+          }
+        }, true);
+      })();
+      (function() {
         try {
           var s = localStorage.getItem('cleanera_settings');
           var iconUrl = '/favicon.ico';

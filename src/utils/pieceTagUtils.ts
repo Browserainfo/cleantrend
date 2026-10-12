@@ -453,9 +453,9 @@ export const renderPieceTagHtml = (tag: PieceTagData): string => {
             </span>
           </div>
 
-          <!-- Service Display (Article name removed; if Dry Cleaning, shows only "DC") -->
+          <!-- Service Display (Article name removed; shows only DC / SP service codes) -->
           <div style="font-weight: 700; font-size: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 0.2px; color: #000;">
-            <span>${(tag.serviceCode === 'DC' || (tag.serviceName && tag.serviceName.toLowerCase().includes('dry clean'))) ? 'DC' : (tag.serviceCode || tag.serviceName || '')}</span>
+            <span>${(tag.serviceCode === 'DC' || (tag.serviceName && tag.serviceName.toLowerCase().includes('dry clean'))) ? 'DC' : (tag.serviceCode === 'SP' || (tag.serviceName && tag.serviceName.toLowerCase().includes('steam press'))) ? 'SP' : (tag.serviceCode || (tag.serviceName ? tag.serviceName.replace(/steam press/gi, '').trim() : ''))}</span>
           </div>
 
           <!-- Tag Delivery Date (ONE DAY EARLIER than CRM Delivery Date) -->
@@ -529,11 +529,8 @@ export const renderPieceTagHtml = (tag: PieceTagData): string => {
         line-height: 1.1;
         white-space: nowrap;
       ">
-        <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 24mm; letter-spacing: 0.1px;">
+        <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%; letter-spacing: 0.1px;">
           ${tag.uniqueSecretCode}
-        </span>
-        <span style="font-weight: 700; color: #000; text-transform: uppercase; white-space: nowrap; margin-left: 2px;">
-          ${(tag.pressingMethod && tag.pressingMethod !== 'Steam Press') ? tag.pressingMethod : ''}
         </span>
       </div>
     </div>
@@ -575,15 +572,13 @@ export const printPiece2RTags = (
 
   const styles = `
     @page {
-      size: auto;
-      size: 38mm auto;
+      size: 38mm 28mm !important;
       margin: 0 !important;
       padding: 0 !important;
     }
     @media print {
       @page {
-        size: auto;
-        size: 38mm auto;
+        size: 38mm 28mm !important;
         margin: 0 !important;
         padding: 0 !important;
       }
@@ -594,7 +589,6 @@ export const printPiece2RTags = (
       }
       html, body {
         width: 38mm !important;
-        height: auto !important;
         margin: 0 !important;
         padding: 0 !important;
         background: #ffffff !important;
@@ -604,24 +598,30 @@ export const printPiece2RTags = (
       }
       .print-tag-wrapper {
         width: 38mm !important;
-        margin: 0 auto 2mm auto !important;
+        height: 28mm !important;
+        max-height: 28mm !important;
+        margin: 0 auto !important;
         padding: 0 !important;
         page-break-inside: avoid !important;
         break-inside: avoid !important;
-        page-break-after: avoid !important;
-        break-after: avoid !important;
+        page-break-after: always !important;
+        break-after: page !important;
         display: block !important;
         box-sizing: border-box !important;
+        overflow: hidden !important;
       }
       .print-tag-wrapper:last-child {
-        margin-bottom: 0 !important;
+        page-break-after: avoid !important;
+        break-after: avoid !important;
       }
       .piece-tag-container {
         width: 38mm !important;
         max-width: 38mm !important;
         min-width: 38mm !important;
-        height: auto !important;
+        height: 28mm !important;
+        max-height: 28mm !important;
         margin: 0 auto !important;
+        padding: 0.6mm 1mm 0.5mm 1mm !important;
         overflow: hidden !important;
         box-sizing: border-box !important;
       }
@@ -632,6 +632,6 @@ export const printPiece2RTags = (
     title: `${bizName}-Piece-Tags-Order-${order.orderNumber}`,
     styles: styles,
     pageWidth: '38mm',
-    pageHeight: 'auto'
+    pageHeight: '28mm'
   });
 };

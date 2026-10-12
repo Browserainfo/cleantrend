@@ -136,10 +136,16 @@ export const HomeScreen: React.FC = () => {
     // Order matching
     if (searchMode === 'ALL' || searchMode === 'ORDER' || searchMode === 'INVOICE') {
       orders.forEach(o => {
-        const matchesOrderNum = o.orderNumber.toString() === q || (qDigits.length > 0 && o.orderNumber.toString() === qDigits) || o.id.toLowerCase().includes(q);
-        const matchesBranchOrder = `${o.branchCode.toLowerCase()}-${o.orderNumber}` === q;
-        const matchesCustName = o.customerName.toLowerCase().includes(q);
-        const matchesCustMobile = (qDigits.length > 0 && o.customerMobile.replace(/\D/g, '').includes(qDigits)) || o.customerMobile.includes(q);
+        const orderNumStr = String(o.orderNumber || '');
+        const orderIdStr = String(o.id || '');
+        const branchCodeStr = String(o.branchCode || '');
+        const custNameStr = String(o.customerName || '');
+        const custMobileStr = String(o.customerMobile || '');
+
+        const matchesOrderNum = orderNumStr === q || (qDigits.length > 0 && orderNumStr === qDigits) || orderIdStr.toLowerCase().includes(q);
+        const matchesBranchOrder = `${branchCodeStr.toLowerCase()}-${orderNumStr}` === q;
+        const matchesCustName = custNameStr.toLowerCase().includes(q);
+        const matchesCustMobile = (qDigits.length > 0 && custMobileStr.replace(/\D/g, '').includes(qDigits)) || custMobileStr.includes(q);
         const matchesInvoiceUrl = o.receiptUrl ? o.receiptUrl.toLowerCase().includes(q) : false;
 
         if (matchesOrderNum || matchesBranchOrder || matchesCustName || matchesCustMobile || matchesInvoiceUrl) {
@@ -151,11 +157,15 @@ export const HomeScreen: React.FC = () => {
     // Garment QR/Barcode matching
     if (searchMode === 'ALL' || searchMode === 'QR_BARCODE') {
       orders.forEach(o => {
+        if (!Array.isArray(o.items)) return;
         o.items.forEach(item => {
-          const barcodeClean = item.barcode.toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (!item) return;
+          const rawBarcode = item.barcode || '';
+          const rawGarmentName = item.garmentName || '';
+          const barcodeClean = rawBarcode.toLowerCase().replace(/[^a-z0-9]/g, '');
           const qClean = q.replace(/[^a-z0-9]/g, '');
-          const matchesBarcode = item.barcode.toLowerCase().includes(q) || (qClean.length > 0 && barcodeClean.includes(qClean));
-          const matchesGarmentName = item.garmentName.toLowerCase().includes(q);
+          const matchesBarcode = rawBarcode.toLowerCase().includes(q) || (qClean.length > 0 && barcodeClean.includes(qClean));
+          const matchesGarmentName = rawGarmentName.toLowerCase().includes(q);
 
           if (matchesBarcode || matchesGarmentName) {
             matchedGarments.push({ order: o, garment: item });

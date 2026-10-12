@@ -634,10 +634,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // 1. Direct barcode match in items (e.g. "4-1-2", "4-2-2", "2-1-2")
     for (const ord of orders) {
-      const matchedItem = ord.items.find(item => 
-        item.barcode.toLowerCase() === cleanQuery || 
-        item.barcode.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanQuery.replace(/[^a-z0-9]/g, '')
-      );
+      const matchedItem = Array.isArray(ord.items) ? ord.items.find(item => {
+        if (!item) return false;
+        const bc = item.barcode || '';
+        return bc.toLowerCase() === cleanQuery || 
+               bc.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanQuery.replace(/[^a-z0-9]/g, '');
+      }) : undefined;
       if (matchedItem) {
         return {
           found: true,
@@ -1557,7 +1559,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const requestPriceCorrection = (orderId: string, barcodeOrName: string, proposedPrice: number, reason: string) => {
     const order = orders.find(o => o.id === orderId);
-    const item = order?.items.find(i => i.barcode === barcodeOrName || i.garmentName.toLowerCase() === barcodeOrName.toLowerCase()) || order?.items[0];
+    const searchTarget = (barcodeOrName || '').toLowerCase();
+    const item = order?.items?.find(i => 
+      (i.barcode && i.barcode.toLowerCase() === searchTarget) || 
+      ((i.garmentName || '').toLowerCase() === searchTarget)
+    ) || order?.items?.[0];
     const currentPrice = item ? item.totalItemPrice : 0;
     const garmentName = item ? item.garmentName : barcodeOrName;
     return submitPriceCorrectionRequest(orderId, garmentName, currentPrice, proposedPrice, reason);

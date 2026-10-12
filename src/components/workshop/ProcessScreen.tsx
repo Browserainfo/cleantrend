@@ -48,11 +48,12 @@ export const ProcessScreen: React.FC = () => {
 
   // Filter based on selected queue tab
   const filteredItems = allWorkshopItems.filter(item => {
+    const qLower = searchBarcode.toLowerCase();
     const matchesSearch = 
-      item.barcode.toLowerCase().includes(searchBarcode.toLowerCase()) ||
-      item.garmentName.toLowerCase().includes(searchBarcode.toLowerCase()) ||
-      item.customerName.toLowerCase().includes(searchBarcode.toLowerCase()) ||
-      item.orderNumber.toString().includes(searchBarcode);
+      (item.barcode || '').toLowerCase().includes(qLower) ||
+      (item.garmentName || '').toLowerCase().includes(qLower) ||
+      (item.customerName || '').toLowerCase().includes(qLower) ||
+      (item.orderNumber ? item.orderNumber.toString().includes(searchBarcode) : false);
 
     if (!matchesSearch) return false;
 

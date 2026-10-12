@@ -215,7 +215,49 @@ export function extractReceiptQueryFromUrlString(urlString: string): string | nu
  */
 export function findOrderFromReceiptQuery(query: string | null, orders: Order[]): Order | undefined {
   if (!query || !query.trim()) return undefined;
-  const clean = query.trim();
+  let clean = query.trim();
+
+  try {
+    clean = decodeURIComponent(clean);
+  } catch (e) {}
+
+  // If query is or contains a URL or query string, extract the target receipt parameter
+  if (clean.includes('?') || clean.includes('=') || clean.includes('&') || clean.includes('/')) {
+    try {
+      const parsedUrl = new URL(clean, 'http://localhost');
+      const param = 
+        parsedUrl.searchParams.get('Reciept') || 
+        parsedUrl.searchParams.get('receipt') || 
+        parsedUrl.searchParams.get('Receipt') || 
+        parsedUrl.searchParams.get('reciept') ||
+        parsedUrl.searchParams.get('invoice') ||
+        parsedUrl.searchParams.get('Invoice') ||
+        parsedUrl.searchParams.get('order') ||
+        parsedUrl.searchParams.get('id') ||
+        parsedUrl.searchParams.get('ref');
+      if (param && param.trim()) {
+        clean = param.trim();
+      } else {
+        const segs = parsedUrl.pathname.split('/').filter(Boolean);
+        const lastSeg = segs[segs.length - 1];
+        if (lastSeg && !['portal', 'invoice', 'receipt', 'invoicedetails.aspx'].includes(lastSeg.toLowerCase())) {
+          clean = lastSeg.trim();
+        }
+      }
+    } catch {
+      const m = clean.match(/(?:Reciept|receipt|invoice|order|id)=([^&]+)/i);
+      if (m && m[1]) {
+        try {
+          clean = decodeURIComponent(m[1]).trim();
+        } catch {
+          clean = m[1].trim();
+        }
+      }
+    }
+  }
+
+  // Strip trailing query parameters or hashes
+  clean = clean.split(/[?#&]/)[0].trim();
   const lower = clean.toLowerCase();
 
   // 1. Direct ID match (e.g. "ord-4", "ord-31")
@@ -276,8 +318,33 @@ export function findOrderFromReceiptQuery(query: string | null, orders: Order[])
  */
 export async function fetchInvoiceFromServer(receiptQuery: string): Promise<{ order?: Order; settings?: Partial<BusinessSettings> } | null> {
   if (!receiptQuery || !receiptQuery.trim()) return null;
+  let clean = receiptQuery.trim();
   try {
-    const encoded = encodeURIComponent(receiptQuery.trim());
+    clean = decodeURIComponent(clean);
+  } catch (e) {}
+
+  if (clean.includes('?') || clean.includes('=') || clean.includes('&')) {
+    try {
+      const parsedUrl = new URL(clean, 'http://localhost');
+      const param = 
+        parsedUrl.searchParams.get('Reciept') || 
+        parsedUrl.searchParams.get('receipt') || 
+        parsedUrl.searchParams.get('Receipt') || 
+        parsedUrl.searchParams.get('reciept') ||
+        parsedUrl.searchParams.get('invoice') ||
+        parsedUrl.searchParams.get('Invoice') ||
+        parsedUrl.searchParams.get('order') ||
+        parsedUrl.searchParams.get('id') ||
+        parsedUrl.searchParams.get('ref');
+      if (param && param.trim()) {
+        clean = param.trim();
+      }
+    } catch {}
+  }
+  clean = clean.split(/[?#&]/)[0].trim();
+
+  try {
+    const encoded = encodeURIComponent(clean);
     const res = await fetch(`/api/invoice/${encoded}`);
     if (res.ok) {
       const data = await res.json();

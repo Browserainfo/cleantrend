@@ -48,6 +48,7 @@ export const OrderManagementScreen: React.FC = () => {
     updateOrder,
     cancelOrder,
     deleteOrder,
+    loadOrderForEditing,
     showToast 
   } = useApp();
 
@@ -657,11 +658,24 @@ export const OrderManagementScreen: React.FC = () => {
                       {/* Actions */}
                       <td className="py-3 px-3 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1.5">
+                          {/* Open in POS Booking */}
+                          <button
+                            onClick={() => {
+                              loadOrderForEditing(order);
+                              setActiveOrderId(order.id);
+                              setActiveView('DROP');
+                            }}
+                            className="p-1.5 bg-sky-50 hover:bg-sky-100 text-sky-700 rounded border border-sky-200 transition cursor-pointer"
+                            title="Open in POS Booking (Add garments with Dry Clean or Steam Press)"
+                          >
+                            <ShoppingBag className="w-3.5 h-3.5" />
+                          </button>
+
                           {/* Open / Edit Button */}
                           <button
                             onClick={() => handleOpenEditModal(order)}
                             className="p-1.5 bg-slate-100 hover:bg-sky-100 text-slate-700 hover:text-sky-700 rounded border border-slate-200 transition"
-                            title="Open / Edit Order"
+                            title="Quick Edit Order Details"
                           >
                             <Edit className="w-3.5 h-3.5" />
                           </button>
@@ -738,10 +752,25 @@ export const OrderManagementScreen: React.FC = () => {
                 </div>
               </div>
 
-              {/* Status and Close */}
-              <div className="flex items-center gap-3">
+              {/* Status, Open in POS, and Close */}
+              <div className="flex items-center gap-2 sm:gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    loadOrderForEditing(editingOrder);
+                    setEditingOrder(null);
+                    setActiveOrderId(editingOrder.id);
+                    setActiveView('DROP');
+                  }}
+                  className="px-2.5 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
+                  title="Open this order in POS Booking to add garments with Dry Clean or Steam Press"
+                >
+                  <ShoppingBag className="w-3.5 h-3.5" />
+                  <span>Open in POS</span>
+                </button>
+
                 <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-slate-300 font-semibold">Status:</span>
+                  <span className="text-xs text-slate-300 font-semibold hidden sm:inline">Status:</span>
                   <select
                     value={editOrderStatus}
                     onChange={(e) => setEditOrderStatus(e.target.value as Order['status'])}

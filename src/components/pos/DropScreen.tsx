@@ -122,13 +122,13 @@ const WEIGHT_SERVICES = [
   }
 ];
 
-// Service Tabs (Screenshot 2: Dry Cleaning, Laundry, Steam Press Only, Leather Care, Mending Only)
+// Service Tabs (Dry Clean, Steam Press, Laundry, Leather Care, Mending)
 const SERVICE_TABS: { code: ServiceCode; name: string; icon: React.ComponentType<{ className?: string }>; description: string; multiplier: number }[] = [
-  { code: 'DC', name: 'Dry Cleaning', icon: Sparkles, description: 'Solvent wash & deluxe pressing', multiplier: 1.0 },
+  { code: 'DC', name: 'Dry Clean', icon: Sparkles, description: 'Solvent wash & deluxe pressing', multiplier: 1.0 },
+  { code: 'SP', name: 'Steam Press', icon: Flame, description: 'High pressure steam finish', multiplier: 0.4 },
   { code: 'LD', name: 'Laundry', icon: Waves, description: 'Machine wash & tumble dry', multiplier: 0.7 },
-  { code: 'SP', name: 'Steam Press Only', icon: Flame, description: 'High pressure steam finish', multiplier: 0.4 },
   { code: 'LC', name: 'Leather Care', icon: Shield, description: 'Conditioning & restoration', multiplier: 2.2 },
-  { code: 'MD', name: 'Mending Only', icon: Scissors, description: 'Button, zipper & minor repairs', multiplier: 0.35 },
+  { code: 'MD', name: 'Mending', icon: Scissors, description: 'Button, zipper & minor repairs', multiplier: 0.35 },
 ];
 
 // Category Tabs (Men, Women, Kids, Household, Shoes, Institutional, Common, Others, Eco Wash)
@@ -213,11 +213,11 @@ export const DropScreen: React.FC = () => {
   const [items, setItems] = useState<OrderGarmentItem[]>([]);
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
 
-  // 6. Delivery & Pickup Options (Inactive by default until manager selects)
+  // 6. Delivery & Pickup Options (Defaults to Store Counter Walk-in)
   const [hasDeliveryCharge, setHasDeliveryCharge] = useState<boolean>(false);
   const [homeDeliveryCharge, setHomeDeliveryCharge] = useState<number>(50);
   const [pickDropCharge, setPickDropCharge] = useState<number>(50);
-  const [pickAndDropType, setPickAndDropType] = useState<'COUNTER_WALKIN' | 'HOME_DELIVERY' | 'DOORSTEP_PICK_DROP' | null>(null);
+  const [pickAndDropType, setPickAndDropType] = useState<'COUNTER_WALKIN' | 'HOME_DELIVERY' | 'DOORSTEP_PICK_DROP' | null>('COUNTER_WALKIN');
 
   // 7. Surcharges, Discounts, Advance, Notes
   const [surchargeType, setSurchargeType] = useState<'NONE' | 'SAME_DAY' | 'NEXT_DAY'>('NONE');
@@ -366,7 +366,7 @@ export const DropScreen: React.FC = () => {
   const getGarmentPrice = (garment: GarmentMaster, serviceCode: ServiceCode): number => {
     // If this garment record matches the requested service code, use its price directly
     if (garment.serviceCode === serviceCode && (garment.price !== undefined || garment.defaultPrice !== undefined)) {
-      return garment.price ?? garment.defaultPrice;
+      return (garment.price ?? garment.defaultPrice) as number;
     }
     // Check if there is another entry in activeCatalog for the exact same garment under the requested service
     const serviceSpecificItem = activeCatalog.find(
@@ -375,18 +375,20 @@ export const DropScreen: React.FC = () => {
            g.serviceCode === serviceCode
     );
     if (serviceSpecificItem) {
-      return serviceSpecificItem.price ?? serviceSpecificItem.defaultPrice;
+      return (serviceSpecificItem.price ?? serviceSpecificItem.defaultPrice) as number;
     }
 
     if (garment.price !== undefined && (!garment.serviceCode || garment.serviceCode === serviceCode)) {
       return garment.price;
     }
 
-    const serviceDef = serviceDefinitions.find(s => s.code === serviceCode) || serviceDefinitions[0];
+    const baseVal = garment.defaultPrice ?? garment.price ?? 100;
     if (serviceCode === 'DC') {
-      return garment.defaultPrice;
+      return baseVal;
     }
-    return Math.round(garment.defaultPrice * (serviceDef.baseMultiplier || 1.0));
+
+    const serviceDef = serviceDefinitions.find(s => s.code === serviceCode) || serviceDefinitions[0];
+    return Math.max(20, Math.round(baseVal * (serviceDef.baseMultiplier || 1.0)));
   };
 
   // Get total pieces of this garment currently in cart
@@ -396,34 +398,33 @@ export const DropScreen: React.FC = () => {
       .reduce((sum, i) => sum + (i.quantity || 1), 0);
   };
 
-  // Filter garments for Per-Piece catalog view: Category + Search filter work together
-  const hasServiceSpecificItems = activeCatalog.some(
-    g => g.category.toUpperCase() === selectedCategory.toUpperCase() && g.serviceCode === selectedServiceTab
-  );
-
-  const filteredGarments = activeCatalog.filter(g => {
-    // 1. Category filter: Selected category (e.g. MEN/WOMEN/KIDS) must remain strictly active
-    const matchesCategory = g.category.toUpperCase() === selectedCategory.toUpperCase();
-    if (!matchesCategory) return false;
-
-    // 2. Service check if applicable
-    if (hasServiceSpecificItems && g.serviceCode && g.serviceCode !== selectedServiceTab) {
-      return false;
+  // Deduplicate garments by unique name per category so all articles appear seamlessly in both Dry Clean & Steam Press
+  const categoryGarments = useMemo(() => {
+    const map = new Map<string, GarmentMaster>();
+    for (const g of activeCatalog) {
+      if (g.category.toUpperCase() !== selectedCategory.toUpperCase()) continue;
+      const key = g.name.trim().toLowerCase();
+      // If we don't have this garment yet, or if this catalog entry matches selectedServiceTab, prefer it
+      if (!map.has(key) || g.serviceCode === selectedServiceTab) {
+        map.set(key, g);
+      }
     }
+    return Array.from(map.values());
+  }, [activeCatalog, selectedCategory, selectedServiceTab]);
 
-    // 3. Search query filter: Must match query if typed
+  const filteredGarments = useMemo(() => {
     const q = garmentSearch.trim().toLowerCase();
-    if (q !== '') {
+    if (!q) return categoryGarments;
+
+    return categoryGarments.filter(g => {
       const itemCode = (g.itemCode || g.code || '').toLowerCase();
-      const matchesSearch = 
+      return (
         g.name.toLowerCase().includes(q) || 
         itemCode.includes(q) ||
-        (g.service && g.service.toLowerCase().includes(q));
-      if (!matchesSearch) return false;
-    }
-
-    return true;
-  });
+        (g.service && g.service.toLowerCase().includes(q))
+      );
+    });
+  }, [categoryGarments, garmentSearch]);
 
   // Smart Article Ordering: usage-based ordering with alphabetical fallback (highest usage at top)
   const sortedGarments = useMemo(() => {
@@ -482,10 +483,11 @@ export const DropScreen: React.FC = () => {
 
     const seq = items.length + 1;
     const newItemId = `item-${Date.now()}-${seq}`;
+    const activeOrderNum = editingOrder?.orderNumber || (Math.max(...orders.map(o => o.orderNumber), 0) + 1);
     const newItem: OrderGarmentItem = {
       id: newItemId,
       garmentSequence: seq,
-      barcode: `4-${seq}-2`,
+      barcode: `${activeOrderNum}-${seq}-2`,
       garmentCode: garment.code || garment.name.slice(0, 3).toUpperCase(),
       garmentName: garment.name,
       category: garment.category,
@@ -513,10 +515,11 @@ export const DropScreen: React.FC = () => {
 
     const seq = items.length + 1;
     const newItemId = `weight-item-${Date.now()}-${seq}`;
+    const activeOrderNum = editingOrder?.orderNumber || (Math.max(...orders.map(o => o.orderNumber), 0) + 1);
     const newItem: OrderGarmentItem = {
       id: newItemId,
       garmentSequence: seq,
-      barcode: `4-${seq}-2`,
+      barcode: `${activeOrderNum}-${seq}-2`,
       garmentCode: currentWeightConfig.code,
       garmentName: `${currentWeightConfig.name} (${currentWeightConfig.code})`,
       category: 'HOUSEHOLD',
@@ -595,10 +598,11 @@ export const DropScreen: React.FC = () => {
   // Remove item
   const handleRemoveItem = (index: number) => {
     const itemToRemove = items[index];
+    const activeOrderNum = editingOrder?.orderNumber || (Math.max(...orders.map(o => o.orderNumber), 0) + 1);
     const updated = items.filter((_, i) => i !== index).map((item, idx) => ({
       ...item,
       garmentSequence: idx + 1,
-      barcode: `4-${idx + 1}-2`
+      barcode: `${activeOrderNum}-${idx + 1}-2`
     }));
     setItems(updated);
     if (itemToRemove && expandedItemId === itemToRemove.id) {
@@ -1363,53 +1367,85 @@ export const DropScreen: React.FC = () => {
           {/* ============================================================ */}
           {orderType === 'PER_PIECES' ? (
             <div className="flex-1 flex flex-col overflow-hidden bg-slate-50/50">
-              {/* CATEGORY SUB-TABS & SEARCH BAR (Screenshots 1 & 2) */}
-              <div className="p-2.5 bg-slate-100/90 border-b border-slate-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 shrink-0">
-                
-                {/* Category Sub-Tabs (Men, Women, Kids, Household, Institutional, Others, Eco Wash) */}
-                <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
-                  {CATEGORY_TABS.map(cat => {
-                    const isSelected = selectedCategory === cat.id;
-                    const IconComp = cat.icon;
-                    return (
+              {/* CATEGORY SUB-TABS & SEARCH BAR */}
+              <div className="p-2.5 bg-slate-100/90 border-b border-slate-200 flex flex-col gap-2 shrink-0">
+                {/* Row 1: Category Sub-Tabs on left, Search input on right */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+                  {/* Category Sub-Tabs (Men, Women, Kids, Household, Institutional, Others, Eco Wash) */}
+                  <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+                    {CATEGORY_TABS.map(cat => {
+                      const isSelected = selectedCategory === cat.id;
+                      const IconComp = cat.icon;
+                      return (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          id={`pos-cat-${cat.id.toLowerCase()}`}
+                          onClick={() => {
+                            setSelectedCategory(cat.id);
+                          }}
+                          className={`px-2.5 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 whitespace-nowrap transition cursor-pointer ${
+                            isSelected
+                              ? 'bg-slate-900 text-white shadow-2xs'
+                              : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-200/80'
+                          }`}
+                        >
+                          <IconComp className="w-3 h-3" />
+                          <span>{cat.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Garment Search Input */}
+                  <div className="relative shrink-0 sm:w-56">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" />
+                    <input
+                      type="text"
+                      placeholder="Search garment to add..."
+                      value={garmentSearch}
+                      onChange={(e) => setGarmentSearch(e.target.value)}
+                      className="w-full pl-8 pr-7 py-1 bg-white border border-slate-300 rounded text-xs text-slate-800 placeholder-slate-400 outline-none focus:ring-1 focus:ring-sky-500 shadow-2xs"
+                    />
+                    {garmentSearch && (
                       <button
-                        key={cat.id}
                         type="button"
-                        onClick={() => {
-                          setSelectedCategory(cat.id);
-                        }}
-                        className={`px-2.5 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1 whitespace-nowrap transition ${
-                          isSelected
-                            ? 'bg-slate-900 text-white shadow-2xs'
-                            : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-200/80'
-                        }`}
+                        onClick={() => setGarmentSearch('')}
+                        className="absolute right-2 top-1.5 text-slate-400 hover:text-slate-600"
                       >
-                        <IconComp className="w-3 h-3" />
-                        <span>{cat.label}</span>
+                        <X className="w-3.5 h-3.5" />
                       </button>
-                    );
-                  })}
+                    )}
+                  </div>
                 </div>
 
-                {/* Garment Search Input */}
-                <div className="relative shrink-0 sm:w-56">
-                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" />
-                  <input
-                    type="text"
-                    placeholder="Search garment to add..."
-                    value={garmentSearch}
-                    onChange={(e) => setGarmentSearch(e.target.value)}
-                    className="w-full pl-8 pr-7 py-1 bg-white border border-slate-300 rounded text-xs text-slate-800 placeholder-slate-400 outline-none focus:ring-1 focus:ring-sky-500 shadow-2xs"
-                  />
-                  {garmentSearch && (
-                    <button
-                      type="button"
-                      onClick={() => setGarmentSearch('')}
-                      className="absolute right-2 top-1.5 text-slate-400 hover:text-slate-600"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
+                {/* Row 2: Directly below the category tabs, ONLY Dry Clean and Steam Press service buttons */}
+                <div className="flex items-center gap-2 pt-1 border-t border-slate-200/70">
+                  <button
+                    type="button"
+                    id="pos-service-dry-clean"
+                    onClick={() => setSelectedServiceTab('DC')}
+                    className={`px-3.5 py-1.5 rounded-md text-xs font-bold transition cursor-pointer select-none ${
+                      selectedServiceTab === 'DC'
+                        ? 'bg-sky-600 text-white shadow-xs ring-2 ring-sky-300 border border-sky-600'
+                        : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-100 hover:text-slate-900'
+                    }`}
+                  >
+                    Dry Clean
+                  </button>
+
+                  <button
+                    type="button"
+                    id="pos-service-steam-press"
+                    onClick={() => setSelectedServiceTab('SP')}
+                    className={`px-3.5 py-1.5 rounded-md text-xs font-bold transition cursor-pointer select-none ${
+                      selectedServiceTab === 'SP'
+                        ? 'bg-orange-600 text-white shadow-xs ring-2 ring-orange-300 border border-orange-600'
+                        : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-100 hover:text-slate-900'
+                    }`}
+                  >
+                    Steam Press
+                  </button>
                 </div>
               </div>
 

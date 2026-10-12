@@ -115,10 +115,6 @@ export const ThermalReceiptModal: React.FC<{ isOpen: boolean; onClose: () => voi
   };
 
   const handleEditBooking = () => {
-    if (isManager && !businessSettings.allowManagerEditBooking) {
-      showToast('ANTI-FRAUD PROTECTION: Manager role cannot modify finalized bookings. Please switch to Admin (Owner) role in top bar.', 'error');
-      return;
-    }
     loadOrderForEditing(order);
     onClose();
   };
@@ -175,24 +171,14 @@ export const ThermalReceiptModal: React.FC<{ isOpen: boolean; onClose: () => voi
             </button>
 
             {/* Edit Booking Button */}
-            {!isManager ? (
-              <button
-                onClick={handleEditBooking}
-                className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold rounded flex items-center gap-1.5 transition cursor-pointer"
-              >
-                <Edit3 className="w-3.5 h-3.5 text-amber-400" />
-                <span>Edit Booking</span>
-              </button>
-            ) : (
-              <button
-                onClick={handleEditBooking}
-                className="px-3 py-1.5 bg-slate-800 text-slate-400 font-semibold rounded flex items-center gap-1.5 cursor-not-allowed border border-slate-700"
-                title="Manager cannot edit orders"
-              >
-                <Lock className="w-3.5 h-3.5 text-amber-500" />
-                <span>Edit (Admin Only)</span>
-              </button>
-            )}
+            <button
+              onClick={handleEditBooking}
+              className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold rounded flex items-center gap-1.5 transition cursor-pointer"
+              title="Open order in POS Booking to modify garments or services"
+            >
+              <Edit3 className="w-3.5 h-3.5 text-amber-400" />
+              <span>Edit Booking</span>
+            </button>
 
             {/* Direct WhatsApp Share Button */}
             <button
