@@ -48,40 +48,42 @@ export const AccountScreen: React.FC = () => {
   const [differenceOption, setDifferenceOption] = useState<'WAIVE' | 'CARRY_FORWARD' | null>(null);
 
   // Calculate Overall Financial Totals (Without GST)
-  const totalGross = orders.reduce((sum, o) => sum + o.grossAmount, 0);
-  const totalDiscount = orders.reduce((sum, o) => sum + o.discountAmount, 0);
-  const totalNet = orders.reduce((sum, o) => sum + o.netAmount, 0);
-  const totalPaid = orders.reduce((sum, o) => sum + (o.netAmount - o.balanceDue), 0);
-  const totalBalance = orders.reduce((sum, o) => sum + o.balanceDue, 0);
+  const totalGross = orders.reduce((sum, o) => sum + (Number(o.grossAmount) || 0), 0);
+  const totalDiscount = orders.reduce((sum, o) => sum + (Number(o.discountAmount) || 0), 0);
+  const totalNet = orders.reduce((sum, o) => sum + (Number(o.netAmount) || 0), 0);
+  const totalPaid = orders.reduce((sum, o) => sum + (Number(o.advancePaid) || (Number(o.netAmount || 0) - Number(o.balanceDue || 0))), 0);
+  const totalBalance = orders.reduce((sum, o) => sum + (Number(o.balanceDue) || 0), 0);
 
-  // Flatten all payment transactions
+  // Flatten all payment transactions safely
   const allPayments = orders.flatMap(order => 
-    order.payments.map(p => ({
+    (order.payments || []).map(p => ({
       ...p,
+      amount: Number(p.amount) || 0,
       orderNumber: order.orderNumber,
-      customerName: order.customerName,
-      customerMobile: order.customerMobile
+      customerName: order.customerName || 'Customer',
+      customerMobile: order.customerMobile || ''
     }))
   );
 
   // Filter transactions
   const filteredPayments = allPayments.filter(p => {
+    const q = searchQuery.toLowerCase();
     const matchesSearch = 
-      p.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.orderNumber.toString().includes(searchQuery) ||
-      (p.referenceId && p.referenceId.toLowerCase().includes(searchQuery.toLowerCase()));
+      (p.customerName || '').toLowerCase().includes(q) ||
+      (p.orderNumber ? p.orderNumber.toString().includes(searchQuery) : false) ||
+      (p.referenceId ? p.referenceId.toLowerCase().includes(q) : false);
     
     const matchesMode = filterMode === 'ALL' || p.paymentMethod === filterMode;
     return matchesSearch && matchesMode;
   });
 
   // Calculate Today's Ledger by Mode
-  const cashCollected = allPayments.filter(p => p.paymentMethod === 'CASH').reduce((sum, p) => sum + p.amount, 0);
-  const upiCollected = allPayments.filter(p => p.paymentMethod === 'UPI').reduce((sum, p) => sum + p.amount, 0);
-  const cardCollected = allPayments.filter(p => p.paymentMethod === 'CARD').reduce((sum, p) => sum + p.amount, 0);
-  const netBankingCollected = allPayments.filter(p => p.paymentMethod === 'NET_BANKING').reduce((sum, p) => sum + p.amount, 0);
+  const cashCollected = allPayments.filter(p => p.paymentMethod === 'CASH').reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  const upiCollected = allPayments.filter(p => p.paymentMethod === 'UPI').reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  const cardCollected = allPayments.filter(p => p.paymentMethod === 'CARD').reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  const netBankingCollected = allPayments.filter(p => p.paymentMethod === 'NET_BANKING').reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
-  const selectedOrderForPayment = orders.find(o => o.id === selectedOrderId) || orders[0];
+  const selectedOrderForPayment = orders.find(o => o.id === selectedOrderId) || orders[0] || null;
 
   const handleOpenCollectForOrder = (orderId: string, defaultAmount: number) => {
     setSelectedOrderId(orderId);
@@ -307,27 +309,27 @@ export const AccountScreen: React.FC = () => {
                       <tr key={o.id} className="hover:bg-slate-50 transition">
                         <td className="p-2.5 font-bold font-mono text-sky-700">#{o.orderNumber}</td>
                         <td className="p-2.5">
-                          <div className="font-bold text-slate-900">{o.customerName}</div>
-                          <div className="text-[10px] text-slate-500 font-mono">{o.customerMobile}</div>
+                          <div className="font-bold text-slate-900">{o.customerName || 'Customer'}</div>
+                          <div className="text-[10px] text-slate-500 font-mono">{o.customerMobile || '—'}</div>
                         </td>
-                        <td className="p-2.5 font-mono font-bold text-slate-900">₹{o.netAmount.toFixed(2)}</td>
+                        <td className="p-2.5 font-mono font-bold text-slate-900">₹{(Number(o.netAmount) || 0).toFixed(2)}</td>
                         <td className="p-2.5 font-mono text-emerald-700 font-bold">
-                          ₹{(o.netAmount - o.balanceDue).toFixed(2)}
+                          ₹{Math.max(0, (Number(o.netAmount) || 0) - (Number(o.balanceDue) || 0)).toFixed(2)}
                         </td>
                         <td className="p-2.5 font-mono text-rose-700 font-bold text-sm">
-                          ₹{o.balanceDue.toFixed(2)}
+                          ₹{(Number(o.balanceDue) || 0).toFixed(2)}
                         </td>
                         <td className="p-2.5">
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
-                            {o.status.replace(/_/g, ' ')}
+                            {(o.status || 'RECEIVED').replace(/_/g, ' ')}
                           </span>
                         </td>
                         <td className="p-2.5 text-right">
                           <button
-                            onClick={() => handleOpenCollectForOrder(o.id, o.balanceDue)}
+                            onClick={() => handleOpenCollectForOrder(o.id, Number(o.balanceDue) || 0)}
                             className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded font-bold text-[11px] shadow-2xs transition cursor-pointer"
                           >
-                            Collect ₹{o.balanceDue.toFixed(0)}
+                            Collect ₹{(Number(o.balanceDue) || 0).toFixed(0)}
                           </button>
                         </td>
                       </tr>

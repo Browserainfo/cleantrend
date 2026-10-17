@@ -129,12 +129,14 @@ export interface Order {
   hasDeliveryCharge?: boolean; // Whether delivery charge is applied
   isPickAndDrop?: boolean; // Whether pick & drop service is chosen
   pickAndDropType?: 'COUNTER_WALKIN' | 'HOME_DELIVERY' | 'DOORSTEP_PICK_DROP'; // Delivery/Pickup mode
+  deliveryType?: 'SAME_DAY' | 'NEXT_DAY' | 'NORMAL' | string; // Delivery speed / urgency type
+  deliveryDate?: string; // Formatted delivery date (e.g. "19 Oct 2026" or "2026-10-19")
   grossAmount: number; // e.g. 910.00
   discountAmount: number; // 0.00
   discountPercent: number; // 0
   discountReason?: string;
   surchargeAmount: number; // e.g. Same Day / Next day
-  surchargeType?: 'NONE' | 'SAME_DAY' | 'NEXT_DAY';
+  surchargeType?: 'NONE' | 'SAME_DAY' | 'NEXT_DAY' | string;
   taxRatePercent: number; // 18% GST
   taxAmount: number; // 163.80
   roundOff: number; // 0.20
@@ -227,6 +229,10 @@ export interface BusinessSettings {
   upiId?: string; // e.g. "smarthub.2988354@hdfcbank"
   upiPayeeName?: string; // e.g. "Trendera Dry Cleaning"
   includeQrInWhatsApp?: boolean; // whether to automatically append payment QR scanner
+  sameDayDeliveryPrice?: number; // Configurable Same Day surcharge / delivery amount in ₹
+  nextDayDeliveryPrice?: number; // Configurable Next Day surcharge / delivery amount in ₹
+  homeDeliveryPrice?: number; // Configurable Home Delivery charge in ₹
+  pickDropPrice?: number; // Configurable Pick & Drop charge in ₹
   razorpayKeyId?: string; // Razorpay TEST Mode Key ID
   enableRazorpayTestMode?: boolean; // toggle for Razorpay test payments
 }

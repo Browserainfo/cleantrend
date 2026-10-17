@@ -23,22 +23,25 @@ export const ReportsScreen: React.FC = () => {
   const [dateRange, setDateRange] = useState<string>('THIS_MONTH');
 
   // Compute key totals
-  const totalSales = orders.reduce((sum, o) => sum + o.netAmount, 0);
-  const totalGross = orders.reduce((sum, o) => sum + o.grossAmount, 0);
-  const totalTax = orders.reduce((sum, o) => sum + o.taxAmount, 0);
-  const totalDiscount = orders.reduce((sum, o) => sum + o.discountAmount, 0);
-  const totalOutstanding = orders.reduce((sum, o) => sum + o.balanceDue, 0);
-  const totalGarments = orders.reduce((sum, o) => sum + o.totalPieces, 0);
+  const totalSales = orders.reduce((sum, o) => sum + (Number(o.netAmount) || 0), 0);
+  const totalGross = orders.reduce((sum, o) => sum + (Number(o.grossAmount) || 0), 0);
+  const totalTax = orders.reduce((sum, o) => sum + (Number(o.taxAmount) || 0), 0);
+  const totalDiscount = orders.reduce((sum, o) => sum + (Number(o.discountAmount) || 0), 0);
+  const totalOutstanding = orders.reduce((sum, o) => sum + (Number(o.balanceDue) || 0), 0);
+  const totalGarments = orders.reduce((sum, o) => sum + (Number(o.totalPieces) || (o.items ? o.items.length : 0)), 0);
 
   // Garment stats calculation
   const garmentStatsMap: { [name: string]: { count: number; revenue: number } } = {};
   orders.forEach(o => {
-    o.items.forEach(item => {
-      if (!garmentStatsMap[item.garmentName]) {
-        garmentStatsMap[item.garmentName] = { count: 0, revenue: 0 };
+    (o.items || []).forEach(item => {
+      const gName = item.garmentName || 'Garment';
+      if (!garmentStatsMap[gName]) {
+        garmentStatsMap[gName] = { count: 0, revenue: 0 };
       }
-      garmentStatsMap[item.garmentName].count += item.quantity;
-      garmentStatsMap[item.garmentName].revenue += item.totalItemPrice * item.quantity;
+      const qty = Number(item.quantity) || 1;
+      const price = Number(item.totalItemPrice) || 0;
+      garmentStatsMap[gName].count += qty;
+      garmentStatsMap[gName].revenue += price * qty;
     });
   });
 
@@ -83,11 +86,11 @@ export const ReportsScreen: React.FC = () => {
             ${orders.map(o => `
               <tr style="border-bottom: 1px solid #ddd;">
                 <td style="padding: 6px;">#${o.orderNumber}</td>
-                <td style="padding: 6px;">${o.customerName} (${o.customerMobile})</td>
-                <td style="padding: 6px;">${o.totalPieces} Pcs</td>
-                <td style="padding: 6px; text-align: right;">${o.netAmount.toFixed(2)}</td>
-                <td style="padding: 6px; text-align: right; font-weight: bold;">${o.balanceDue.toFixed(2)}</td>
-                <td style="padding: 6px; text-align: center;">${o.status}</td>
+                <td style="padding: 6px;">${o.customerName || 'Customer'} (${o.customerMobile || ''})</td>
+                <td style="padding: 6px;">${o.totalPieces || (o.items ? o.items.length : 0)} Pcs</td>
+                <td style="padding: 6px; text-align: right;">${(Number(o.netAmount) || 0).toFixed(2)}</td>
+                <td style="padding: 6px; text-align: right; font-weight: bold;">${(Number(o.balanceDue) || 0).toFixed(2)}</td>
+                <td style="padding: 6px; text-align: center;">${o.status || 'RECEIVED'}</td>
               </tr>
             `).join('')}
           </tbody>
@@ -271,19 +274,19 @@ export const ReportsScreen: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {orders.flatMap(o => o.payments.map(p => ({ ...p, oNum: o.orderNumber, cName: o.customerName }))).map((p, idx) => (
+                  {orders.flatMap(o => (Array.isArray(o.payments) ? o.payments : []).map(p => ({ ...p, oNum: o.orderNumber, cName: o.customerName }))).map((p, idx) => (
                     <tr key={idx} className="hover:bg-slate-50">
-                      <td className="p-3 font-mono text-slate-600">{new Date(p.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
+                      <td className="p-3 font-mono text-slate-600">{p.timestamp ? new Date(p.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
                       <td className="p-3 font-bold font-mono text-sky-700">#{p.oNum}</td>
-                      <td className="p-3 font-bold text-slate-900">{p.cName}</td>
+                      <td className="p-3 font-bold text-slate-900">{p.cName || 'Customer'}</td>
                       <td className="p-3">
                         <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
-                          {p.channel}
+                          {p.channel || 'COUNTER'}
                         </span>
                       </td>
-                      <td className="p-3 font-bold text-emerald-800">{p.paymentMethod}</td>
-                      <td className="p-3 text-slate-600">{p.collectedBy}</td>
-                      <td className="p-3 font-mono font-bold text-slate-900 text-right">₹{p.amount.toFixed(2)}</td>
+                      <td className="p-3 font-bold text-emerald-800">{p.paymentMethod || 'CASH'}</td>
+                      <td className="p-3 text-slate-600">{p.collectedBy || 'Staff'}</td>
+                      <td className="p-3 font-mono font-bold text-slate-900 text-right">₹{(Number(p.amount) || 0).toFixed(2)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -310,15 +313,15 @@ export const ReportsScreen: React.FC = () => {
                   {orders.map(o => (
                     <tr key={o.id} className="hover:bg-slate-50">
                       <td className="p-3 font-bold font-mono text-sky-700">#{o.orderNumber}</td>
-                      <td className="p-3 font-mono text-slate-600">{o.orderDate}</td>
-                      <td className="p-3 font-bold text-slate-900">{o.customerName}</td>
-                      <td className="p-3 font-mono">₹{o.grossAmount.toFixed(2)}</td>
-                      <td className="p-3 font-mono text-rose-600">₹{o.discountAmount.toFixed(2)}</td>
-                      <td className="p-3 font-mono font-bold text-sky-950">₹{o.netAmount.toFixed(2)}</td>
-                      <td className="p-3 font-mono font-bold text-rose-700">₹{o.balanceDue.toFixed(2)}</td>
+                      <td className="p-3 font-mono text-slate-600">{o.orderDate || '—'}</td>
+                      <td className="p-3 font-bold text-slate-900">{o.customerName || 'Customer'}</td>
+                      <td className="p-3 font-mono">₹{(Number(o.grossAmount) || 0).toFixed(2)}</td>
+                      <td className="p-3 font-mono text-rose-600">₹{(Number(o.discountAmount) || 0).toFixed(2)}</td>
+                      <td className="p-3 font-mono font-bold text-sky-950">₹{(Number(o.netAmount) || 0).toFixed(2)}</td>
+                      <td className="p-3 font-mono font-bold text-rose-700">₹{(Number(o.balanceDue) || 0).toFixed(2)}</td>
                       <td className="p-3">
                         <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">
-                          {o.status}
+                          {(o.status || 'RECEIVED').replace(/_/g, ' ')}
                         </span>
                       </td>
                     </tr>
@@ -341,14 +344,14 @@ export const ReportsScreen: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {customers.filter(c => c.outstandingAmount > 0).map(c => (
+                  {customers.filter(c => (Number(c.outstandingAmount) || 0) > 0).map(c => (
                     <tr key={c.id} className="hover:bg-slate-50">
                       <td className="p-3 font-bold text-slate-900">{c.name}</td>
-                      <td className="p-3 font-mono text-slate-600">{c.mobile}</td>
-                      <td className="p-3 text-slate-600">{c.area}</td>
-                      <td className="p-3 font-bold text-slate-800">{c.pendingOrdersCount} orders</td>
+                      <td className="p-3 font-mono text-slate-600">{c.mobile || '—'}</td>
+                      <td className="p-3 text-slate-600">{c.area || '—'}</td>
+                      <td className="p-3 font-bold text-slate-800">{c.pendingOrdersCount || 0} orders</td>
                       <td className="p-3 font-mono font-bold text-rose-700 text-right text-sm">
-                        ₹{c.outstandingAmount.toFixed(2)}
+                        ₹{(Number(c.outstandingAmount) || 0).toFixed(2)}
                       </td>
                     </tr>
                   ))}
@@ -372,7 +375,7 @@ export const ReportsScreen: React.FC = () => {
                     <tr key={i} className="hover:bg-slate-50">
                       <td className="p-3 font-bold text-slate-900">{stat.name}</td>
                       <td className="p-3 font-bold font-mono text-sky-700">{stat.count} Pcs</td>
-                      <td className="p-3 font-mono font-bold text-slate-900 text-right">₹{stat.revenue.toFixed(2)}</td>
+                      <td className="p-3 font-mono font-bold text-slate-900 text-right">₹{(Number(stat.revenue) || 0).toFixed(2)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -393,12 +396,12 @@ export const ReportsScreen: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {orders.filter(o => o.discountAmount > 0).map(o => (
+                  {orders.filter(o => (Number(o.discountAmount) || 0) > 0).map(o => (
                     <tr key={o.id} className="hover:bg-slate-50">
                       <td className="p-3 font-bold font-mono text-sky-700">#{o.orderNumber}</td>
-                      <td className="p-3 font-bold text-slate-900">{o.customerName}</td>
+                      <td className="p-3 font-bold text-slate-900">{o.customerName || 'Customer'}</td>
                       <td className="p-3 font-mono font-bold text-rose-700">
-                        {o.discountPercent}% (₹{o.discountAmount.toFixed(2)})
+                        {o.discountPercent || 0}% (₹{(Number(o.discountAmount) || 0).toFixed(2)})
                       </td>
                       <td className="p-3 text-slate-700 italic">"{o.discountReason || 'Promotional waiver'}"</td>
                       <td className="p-3">

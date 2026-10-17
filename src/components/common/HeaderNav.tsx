@@ -49,7 +49,8 @@ export const HeaderNav: React.FC = () => {
     whatsAppMessages,
     showToast,
     resetToDefaults,
-    setActiveOrderId
+    setActiveOrderId,
+    cancelEditingOrder
   } = useApp();
 
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
@@ -63,6 +64,10 @@ export const HeaderNav: React.FC = () => {
     }
     setActiveDropdown(null);
     if (['ORDERS', 'ORDER_LIST', 'ORDER_MANAGEMENT'].includes(viewName)) {
+      setActiveOrderId('');
+    }
+    if (['DROP', 'ORDER_CREATE'].includes(viewName)) {
+      cancelEditingOrder();
       setActiveOrderId('');
     }
     setActiveView(viewName);
@@ -164,7 +169,7 @@ export const HeaderNav: React.FC = () => {
             title="Scan QR code for instant customer pickup, balance settlement & delivery"
           >
             <Scan className="w-3.5 h-3.5 text-emerald-200" />
-            <span>Scan Pickup</span>
+            <span>Scan Delivery</span>
           </button>
 
           {/* Customer Portal Link Simulator */}

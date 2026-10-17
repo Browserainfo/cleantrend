@@ -185,7 +185,7 @@ export const DropScreen: React.FC = () => {
   // 1. Customer Selection State
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>(() => {
     if (editingOrderData?.customerId) return editingOrderData.customerId;
-    return activeCustomerId || customers[0]?.id || '';
+    return activeCustomerId || '';
   });
   
   useEffect(() => {
@@ -213,14 +213,55 @@ export const DropScreen: React.FC = () => {
   const [items, setItems] = useState<OrderGarmentItem[]>([]);
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
 
-  // 6. Delivery & Pickup Options (Defaults to Store Counter Walk-in)
+  // 6. Delivery & Pickup Options (Initially null - neither Store Counter nor Delivery selected)
   const [hasDeliveryCharge, setHasDeliveryCharge] = useState<boolean>(false);
   const [homeDeliveryCharge, setHomeDeliveryCharge] = useState<number>(50);
   const [pickDropCharge, setPickDropCharge] = useState<number>(50);
-  const [pickAndDropType, setPickAndDropType] = useState<'COUNTER_WALKIN' | 'HOME_DELIVERY' | 'DOORSTEP_PICK_DROP' | null>('COUNTER_WALKIN');
+  const [pickAndDropType, setPickAndDropType] = useState<'COUNTER_WALKIN' | 'HOME_DELIVERY' | 'DOORSTEP_PICK_DROP' | null>(null);
 
   // 7. Surcharges, Discounts, Advance, Notes
   const [surchargeType, setSurchargeType] = useState<'NONE' | 'SAME_DAY' | 'NEXT_DAY'>('NONE');
+  // Configurable & Editable Same Day Delivery Price (Admin can edit directly on button or in settings)
+  const [sameDayPrice, setSameDayPrice] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('trendera_sameday_price');
+      if (saved !== null && !isNaN(parseFloat(saved))) {
+        return parseFloat(saved);
+      }
+      if (businessSettings?.sameDayDeliveryPrice !== undefined) {
+        return businessSettings.sameDayDeliveryPrice;
+      }
+    } catch {}
+    return 0;
+  });
+  const [isSameDayPriceManuallyEdited, setIsSameDayPriceManuallyEdited] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('trendera_sameday_custom') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  // Configurable & Editable Next Day Delivery Price (Admin can edit directly on button or in settings)
+  const [nextDayPrice, setNextDayPrice] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('trendera_nextday_price');
+      if (saved !== null && !isNaN(parseFloat(saved))) {
+        return parseFloat(saved);
+      }
+      if (businessSettings?.nextDayDeliveryPrice !== undefined) {
+        return businessSettings.nextDayDeliveryPrice;
+      }
+    } catch {}
+    return 0;
+  });
+  const [isNextDayPriceManuallyEdited, setIsNextDayPriceManuallyEdited] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('trendera_nextday_custom') === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [discountPercent, setDiscountPercent] = useState<number>(0);
   const [discountReason, setDiscountReason] = useState<string>('');
   const [advancePaid, setAdvancePaid] = useState<number>(0);
@@ -330,7 +371,16 @@ export const DropScreen: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [items, selectedCustomerId, discountPercent, advancePaid, currentRole, hasDeliveryCharge, homeDeliveryCharge, pickDropCharge, pickAndDropType, selectedDueDate]);
 
-  const selectedCustomer: Customer = customers.find(c => c.id === selectedCustomerId) || customers[0];
+  const selectedCustomer: Customer | undefined = customers.find(c => c.id === selectedCustomerId);
+
+  // Newly added customers first in list
+  const sortedCustomers = useMemo(() => {
+    return [...customers].sort((a, b) => {
+      const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return timeB - timeA;
+    });
+  }, [customers]);
 
   // Active weight service config
   const currentWeightConfig = WEIGHT_SERVICES.find(w => w.code === selectedWeightService) || WEIGHT_SERVICES[0];
@@ -743,10 +793,20 @@ export const DropScreen: React.FC = () => {
   // Gross items subtotal
   const grossAmount = itemsGrossAmount;
   
-  // Surcharges (calculated on items gross amount)
+  // Surcharges (calculated on items gross amount or custom configured price)
+  const defaultCalculatedSameDay = Math.round((itemsGrossAmount * 50) / 100);
+  const effectiveSameDayPrice = (isSameDayPriceManuallyEdited || sameDayPrice > 0)
+    ? sameDayPrice
+    : (defaultCalculatedSameDay > 0 ? defaultCalculatedSameDay : (businessSettings?.sameDayDeliveryPrice || 400));
+
+  const defaultCalculatedNextDay = Math.round((itemsGrossAmount * 25) / 100);
+  const effectiveNextDayPrice = (isNextDayPriceManuallyEdited || nextDayPrice > 0)
+    ? nextDayPrice
+    : (defaultCalculatedNextDay > 0 ? defaultCalculatedNextDay : (businessSettings?.nextDayDeliveryPrice || 200));
+
   let calculatedSurcharge = 0;
-  if (surchargeType === 'SAME_DAY') calculatedSurcharge = Math.round((itemsGrossAmount * 50) / 100);
-  if (surchargeType === 'NEXT_DAY') calculatedSurcharge = Math.round((itemsGrossAmount * 25) / 100);
+  if (surchargeType === 'SAME_DAY') calculatedSurcharge = effectiveSameDayPrice;
+  if (surchargeType === 'NEXT_DAY') calculatedSurcharge = effectiveNextDayPrice;
 
   // Discount is calculated on items gross amount (garment cleaning services)
   const calculatedDiscount = Number(((itemsGrossAmount * (discountPercent || 0)) / 100).toFixed(2));
@@ -781,7 +841,7 @@ export const DropScreen: React.FC = () => {
   // Save Order
   const handleSaveOrder = () => {
     try {
-      const targetCustomer = selectedCustomer || (selectedCustomerId ? customers.find(c => c.id === selectedCustomerId) : undefined) || customers[0];
+      const targetCustomer = selectedCustomer || (selectedCustomerId ? customers.find(c => c.id === selectedCustomerId) : undefined);
       if (!targetCustomer) {
         showToast('Please select or create a customer before saving the order.', 'warning');
         return;
@@ -797,13 +857,20 @@ export const DropScreen: React.FC = () => {
         return;
       }
 
-      let formattedDueDate = new Date().toISOString().split('T')[0];
+      let formattedDueDate: string;
       try {
         if (selectedDueDate instanceof Date && !isNaN(selectedDueDate.getTime())) {
-          formattedDueDate = selectedDueDate.toISOString().split('T')[0];
+          const y = selectedDueDate.getFullYear();
+          const m = String(selectedDueDate.getMonth() + 1).padStart(2, '0');
+          const d = String(selectedDueDate.getDate()).padStart(2, '0');
+          formattedDueDate = `${y}-${m}-${d}`;
+        } else {
+          const now = new Date();
+          formattedDueDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
         }
       } catch {
-        formattedDueDate = new Date().toISOString().split('T')[0];
+        const now = new Date();
+        formattedDueDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       }
 
       const effectiveDiffAction = (advancePaid > 0 && advanceDiff > 0 && advanceDiffOption) ? advanceDiffOption : undefined;
@@ -818,7 +885,8 @@ export const DropScreen: React.FC = () => {
         deliveryCharge: effectiveDeliveryCharge,
         hasDeliveryCharge: isDeliveryApplied,
         isPickAndDrop: pickAndDropType === 'DOORSTEP_PICK_DROP',
-        pickAndDropType: pickAndDropType || 'COUNTER_WALKIN',
+        pickAndDropType: pickAndDropType || undefined,
+        deliveryType: surchargeType === 'SAME_DAY' ? 'SAME_DAY' : (surchargeType === 'NEXT_DAY' ? 'NEXT_DAY' : 'NORMAL'),
         surchargeType,
         surchargeAmount: calculatedSurcharge,
         discountPercent,
@@ -857,6 +925,8 @@ export const DropScreen: React.FC = () => {
         setWorkshopNotes('');
         setDeliveryNotes('');
         setSurchargeType('NONE');
+        setIsSameDayPriceManuallyEdited(false);
+        setIsNextDayPriceManuallyEdited(false);
         setHasDeliveryCharge(false);
         setPickAndDropType(null); // Reset delivery option for next order
         setAdvanceDiffOption(null);
@@ -897,7 +967,7 @@ export const DropScreen: React.FC = () => {
     setItems(loadedItems);
 
     // 4. Delivery & Pickup Option
-    const pickType = targetOrder.pickAndDropType || (targetOrder.isPickAndDrop ? 'DOORSTEP_PICK_DROP' : 'COUNTER_WALKIN');
+    const pickType = targetOrder.pickAndDropType || (targetOrder.isPickAndDrop ? 'DOORSTEP_PICK_DROP' : null);
     setPickAndDropType(pickType);
     const hasDel = !!targetOrder.hasDeliveryCharge || (Number(targetOrder.deliveryCharge) > 0);
     setHasDeliveryCharge(hasDel);
@@ -910,7 +980,19 @@ export const DropScreen: React.FC = () => {
     // 5. Discounts, Surcharges, Advance & Notes
     setDiscountPercent(Number(targetOrder.discountPercent) || 0);
     setDiscountReason(targetOrder.discountReason || '');
-    setSurchargeType((targetOrder.surchargeType as any) || 'NONE');
+    const isSameDay = (targetOrder.surchargeType === 'SAME_DAY' || targetOrder.deliveryType === 'SAME_DAY');
+    setSurchargeType(isSameDay ? 'SAME_DAY' : (targetOrder.surchargeType as any) || 'NONE');
+    if (isSameDay) {
+      if (targetOrder.surchargeAmount !== undefined && targetOrder.surchargeAmount !== null) {
+        setSameDayPrice(Number(targetOrder.surchargeAmount) || 0);
+        setIsSameDayPriceManuallyEdited(true);
+      }
+    } else if (targetOrder.surchargeType === 'NEXT_DAY') {
+      if (targetOrder.surchargeAmount !== undefined && targetOrder.surchargeAmount !== null) {
+        setNextDayPrice(Number(targetOrder.surchargeAmount) || 0);
+        setIsNextDayPriceManuallyEdited(true);
+      }
+    }
     setAdvancePaid(Number(targetOrder.advancePaid) || 0);
     setWorkshopNotes(targetOrder.workshopNotes || '');
     setDeliveryNotes(targetOrder.deliveryNotes || '');
@@ -918,9 +1000,17 @@ export const DropScreen: React.FC = () => {
     // 6. Due Date
     if (targetOrder.dueDate) {
       try {
-        const parsed = new Date(targetOrder.dueDate);
-        if (!isNaN(parsed.getTime())) {
-          setSelectedDueDate(parsed);
+        const ymdMatch = targetOrder.dueDate.trim().match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+        if (ymdMatch) {
+          const y = parseInt(ymdMatch[1], 10);
+          const m = parseInt(ymdMatch[2], 10) - 1;
+          const d = parseInt(ymdMatch[3], 10);
+          setSelectedDueDate(new Date(y, m, d));
+        } else {
+          const parsed = new Date(targetOrder.dueDate);
+          if (!isNaN(parsed.getTime())) {
+            setSelectedDueDate(parsed);
+          }
         }
       } catch {}
     }
@@ -963,6 +1053,8 @@ export const DropScreen: React.FC = () => {
     setWorkshopNotes('');
     setDeliveryNotes('');
     setSurchargeType('NONE');
+    setIsSameDayPriceManuallyEdited(false);
+    setIsNextDayPriceManuallyEdited(false);
     setHasDeliveryCharge(false);
     setPickAndDropType(null);
     showToast('Order edit cancelled. Ready for new booking.', 'info');
@@ -972,7 +1064,7 @@ export const DropScreen: React.FC = () => {
   const handleUpdateOrder = () => {
     if (!editingOrder) return;
     try {
-      const targetCustomer = selectedCustomer || (selectedCustomerId ? customers.find(c => c.id === selectedCustomerId) : undefined) || customers[0];
+      const targetCustomer = selectedCustomer || (selectedCustomerId ? customers.find(c => c.id === selectedCustomerId) : undefined);
       if (!targetCustomer) {
         showToast('Please select or create a customer before saving.', 'warning');
         return;
@@ -988,10 +1080,13 @@ export const DropScreen: React.FC = () => {
         return;
       }
 
-      let formattedDueDate = editingOrder.dueDate || new Date().toISOString().split('T')[0];
+      let formattedDueDate = editingOrder.dueDate || '';
       try {
         if (selectedDueDate instanceof Date && !isNaN(selectedDueDate.getTime())) {
-          formattedDueDate = selectedDueDate.toISOString().split('T')[0];
+          const y = selectedDueDate.getFullYear();
+          const m = String(selectedDueDate.getMonth() + 1).padStart(2, '0');
+          const d = String(selectedDueDate.getDate()).padStart(2, '0');
+          formattedDueDate = `${y}-${m}-${d}`;
         }
       } catch {}
 
@@ -1023,7 +1118,9 @@ export const DropScreen: React.FC = () => {
         deliveryCharge: effectiveDeliveryCharge,
         hasDeliveryCharge: isDeliveryApplied,
         isPickAndDrop: pickAndDropType === 'DOORSTEP_PICK_DROP',
-        pickAndDropType: pickAndDropType || 'COUNTER_WALKIN',
+        pickAndDropType: pickAndDropType || undefined,
+        deliveryType: surchargeType === 'SAME_DAY' ? 'SAME_DAY' : (surchargeType === 'NEXT_DAY' ? 'NEXT_DAY' : 'NORMAL'),
+        deliveryDate: formattedDueDate,
         surchargeType,
         surchargeAmount: calculatedSurcharge,
         discountPercent,
@@ -1051,6 +1148,8 @@ export const DropScreen: React.FC = () => {
         setWorkshopNotes('');
         setDeliveryNotes('');
         setSurchargeType('NONE');
+        setIsSameDayPriceManuallyEdited(false);
+        setIsNextDayPriceManuallyEdited(false);
         setHasDeliveryCharge(false);
         setPickAndDropType(null);
 
@@ -1182,13 +1281,14 @@ export const DropScreen: React.FC = () => {
 
               {isCustomerDropdownOpen && (
                 <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-md shadow-lg max-h-48 overflow-y-auto z-30 divide-y divide-slate-100 text-xs">
-                  {customers
+                  {sortedCustomers
                     .filter(c => c.name.toLowerCase().includes(customerSearchQuery.toLowerCase()) || c.mobile.includes(customerSearchQuery))
                     .map(c => (
                       <div
                         key={c.id}
                         onClick={() => {
                           setSelectedCustomerId(c.id);
+                          setActiveCustomerId(c.id);
                           setIsCustomerDropdownOpen(false);
                           setCustomerSearchQuery('');
                         }}
@@ -1208,30 +1308,43 @@ export const DropScreen: React.FC = () => {
             </div>
 
             {/* Selected Customer Mini-Badge */}
-            <div className="bg-sky-50/80 p-2 rounded border border-sky-200 text-xs flex justify-between items-center">
-              <div>
-                <div className="font-bold text-sky-950 flex items-center gap-1.5">
-                  <span>{selectedCustomer.name}</span>
-                  <span className="text-[10px] font-mono px-1 bg-sky-200 text-sky-800 rounded">
-                    {selectedCustomer.custCode}
-                  </span>
+            {selectedCustomer ? (
+              <div className="bg-sky-50/80 p-2 rounded border border-sky-200 text-xs flex justify-between items-center">
+                <div>
+                  <div className="font-bold text-sky-950 flex items-center gap-1.5">
+                    <span>{selectedCustomer.name}</span>
+                    <span className="text-[10px] font-mono px-1 bg-sky-200 text-sky-800 rounded">
+                      {selectedCustomer.custCode}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-600 font-mono">{selectedCustomer.mobile}</div>
                 </div>
-                <div className="text-[11px] text-slate-600 font-mono">{selectedCustomer.mobile}</div>
+                <div className="flex flex-col items-end gap-1">
+                  {(Number(selectedCustomer.outstandingAmount) || 0) > 0 && (
+                    <span className="text-[10px] font-bold text-rose-700 bg-rose-100 px-1.5 py-0.5 rounded border border-rose-200">
+                      Due: ₹{(Number(selectedCustomer.outstandingAmount) || 0).toFixed(0)}
+                    </span>
+                  )}
+                  {(Number(availableAdjustment) || 0) > 0 && (
+                    <span className="text-[10px] font-bold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded border border-blue-200 flex items-center gap-1">
+                      <Sparkles className="w-2.5 h-2.5" />
+                      Adj: ₹{(Number(availableAdjustment) || 0).toFixed(2)}
+                    </span>
+                  )}
+                </div>
               </div>
-              <div className="flex flex-col items-end gap-1">
-                {selectedCustomer.outstandingAmount > 0 && (
-                  <span className="text-[10px] font-bold text-rose-700 bg-rose-100 px-1.5 py-0.5 rounded border border-rose-200">
-                    Due: ₹{selectedCustomer.outstandingAmount.toFixed(0)}
-                  </span>
-                )}
-                {availableAdjustment > 0 && (
-                  <span className="text-[10px] font-bold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded border border-blue-200 flex items-center gap-1">
-                    <Sparkles className="w-2.5 h-2.5" />
-                    Adj: ₹{availableAdjustment.toFixed(2)}
-                  </span>
-                )}
+            ) : (
+              <div className="bg-amber-50/70 p-2.5 rounded border border-amber-200 text-xs flex items-center justify-between text-amber-900">
+                <span className="font-medium text-[11px]">No customer selected. Search above or add customer.</span>
+                <button
+                  type="button"
+                  onClick={() => setActiveView('CUSTOMER')}
+                  className="px-2 py-0.5 bg-amber-600 hover:bg-amber-500 text-white rounded text-[10px] font-bold"
+                >
+                  + Add
+                </button>
               </div>
-            </div>
+            )}
 
             {/* Available Adjustment Balance on Customer's Next Order */}
             {availableAdjustment > 0 && (
@@ -2080,9 +2193,6 @@ export const DropScreen: React.FC = () => {
                                   onChange={(e) => handleChangePressingMethod(idx, e.target.value as PressingMethod)}
                                   className="p-1 bg-white border border-slate-300 rounded text-xs font-semibold text-slate-800 outline-none focus:ring-1 focus:ring-sky-500"
                                 >
-                                  {item.pressingMethod === 'Steam Press' && (
-                                    <option value="Steam Press" disabled>Steam Press (Archived)</option>
-                                  )}
                                   {PRESSING_METHOD_OPTIONS.map(opt => (
                                     <option key={opt} value={opt}>{opt}</option>
                                   ))}
@@ -2160,8 +2270,9 @@ export const DropScreen: React.FC = () => {
                                     );
                                   })()}
 
-                                  {/* Steam Press Top-Up */}
+                                  {/* Steam Press Top-Up (Only relevant for dry clean items, not items already booked under Steam Press) */}
                                   {(() => {
+                                    if (item.serviceCode === 'SP') return null;
                                     const activeSteam = item.subServices.find(s => s.code === 'SP');
                                     if (activeSteam) {
                                       return (
@@ -2398,40 +2509,185 @@ export const DropScreen: React.FC = () => {
 
               {/* Express Delivery Surcharge */}
               <div className="space-y-1">
-                <label className="font-bold text-slate-700 flex items-center justify-between text-[11px]">
+                <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
                   <span>Speed / Surcharge</span>
                   {calculatedSurcharge > 0 && (
                     <span className="text-amber-600 font-bold">+₹{calculatedSurcharge}</span>
                   )}
-                </label>
-                <div className="grid grid-cols-3 gap-1">
-                  <button
-                    type="button"
+                </div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {/* Standard */}
+                  <div
+                    role="button"
+                    tabIndex={0}
                     onClick={() => setSurchargeType('NONE')}
-                    className={`py-1 rounded text-[11px] font-bold border transition ${
-                      surchargeType === 'NONE' ? 'bg-slate-800 text-white border-slate-800' : 'bg-slate-100 text-slate-700 border-slate-200'
+                    className={`p-2 rounded-lg border text-left transition flex flex-col justify-between cursor-pointer ${
+                      surchargeType === 'NONE'
+                        ? 'bg-slate-800 text-white border-slate-800 shadow-2xs font-semibold'
+                        : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100 hover:border-slate-400'
                     }`}
                   >
-                    Standard
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSurchargeType('NEXT_DAY')}
-                    className={`py-1 rounded text-[11px] font-bold border transition ${
-                      surchargeType === 'NEXT_DAY' ? 'bg-amber-600 text-white border-amber-600' : 'bg-slate-100 text-slate-700 border-slate-200'
+                    <div className="font-bold text-[11px] leading-tight">Standard</div>
+                    <div className={`text-[9px] mt-1 ${surchargeType === 'NONE' ? 'text-slate-300' : 'text-slate-500'}`}>Normal Speed</div>
+                  </div>
+
+                  {/* Next Day (Directly editable price on button just like Same Day) */}
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    id="btn-surcharge-next-day"
+                    onClick={() => {
+                      if (surchargeType === 'NEXT_DAY') {
+                        setSurchargeType('NONE');
+                      } else {
+                        setSurchargeType('NEXT_DAY');
+                        const nextDate = new Date();
+                        nextDate.setDate(nextDate.getDate() + 1);
+                        if (nextDate.getDay() === 4) {
+                          nextDate.setDate(nextDate.getDate() + 1);
+                        }
+                        setSelectedDueDate(nextDate);
+                      }
+                    }}
+                    className={`p-2 rounded-lg border text-left transition flex flex-col justify-between cursor-pointer ${
+                      surchargeType === 'NEXT_DAY'
+                        ? 'bg-amber-100/90 border-amber-500 ring-2 ring-amber-300 text-amber-950 shadow-2xs font-semibold'
+                        : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100 hover:border-slate-400'
                     }`}
                   >
-                    Next Day (+25%)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSurchargeType('SAME_DAY')}
-                    className={`py-1 rounded text-[11px] font-bold border transition ${
-                      surchargeType === 'SAME_DAY' ? 'bg-rose-600 text-white border-rose-600' : 'bg-slate-100 text-slate-700 border-slate-200'
+                    <div>
+                      <div className="font-bold text-[11px] leading-tight flex items-center justify-between">
+                        <span>Next Day</span>
+                        {surchargeType === 'NEXT_DAY' && <Check className="w-3 h-3 text-amber-700" />}
+                      </div>
+                      <div className="text-[9px] text-slate-500 mt-0.5">+24h Express</div>
+                    </div>
+                    <div
+                      className="mt-1 flex items-center gap-1 w-fit"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <span className={`text-[9.5px] font-bold ${surchargeType === 'NEXT_DAY' ? 'text-amber-950' : 'text-slate-500'}`}>
+                        +₹
+                      </span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0"
+                        value={effectiveNextDayPrice === 0 ? '' : effectiveNextDayPrice}
+                        title="Click to edit Next Day Price"
+                        onFocus={(e) => {
+                          e.target.select();
+                          if (surchargeType !== 'NEXT_DAY') {
+                            setSurchargeType('NEXT_DAY');
+                            const nextDate = new Date();
+                            nextDate.setDate(nextDate.getDate() + 1);
+                            if (nextDate.getDay() === 4) {
+                              nextDate.setDate(nextDate.getDate() + 1);
+                            }
+                            setSelectedDueDate(nextDate);
+                          }
+                        }}
+                        onChange={(e) => {
+                          const cleaned = e.target.value.replace(/[^0-9.]/g, '').replace(/^0+(?=\d)/, '');
+                          const num = cleaned === '' ? 0 : parseFloat(cleaned);
+                          const val = isNaN(num) ? 0 : num;
+                          setNextDayPrice(val);
+                          setIsNextDayPriceManuallyEdited(true);
+                          if (surchargeType !== 'NEXT_DAY') {
+                            setSurchargeType('NEXT_DAY');
+                            const nextDate = new Date();
+                            nextDate.setDate(nextDate.getDate() + 1);
+                            if (nextDate.getDay() === 4) {
+                              nextDate.setDate(nextDate.getDate() + 1);
+                            }
+                            setSelectedDueDate(nextDate);
+                          }
+                          try {
+                            localStorage.setItem('trendera_nextday_price', String(val));
+                            localStorage.setItem('trendera_nextday_custom', 'true');
+                          } catch {}
+                        }}
+                        className={`w-14 px-1 py-0.5 text-center font-mono font-bold text-xs rounded border outline-none shadow-2xs transition ${
+                          surchargeType === 'NEXT_DAY'
+                            ? 'bg-white border-amber-500 text-amber-950 focus:ring-1 focus:ring-amber-600'
+                            : 'bg-slate-50 border-slate-300 text-slate-700 hover:bg-white focus:bg-white focus:ring-1 focus:ring-slate-400'
+                        }`}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Same Day (Directly editable price on button just like Home Delivery) */}
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    id="btn-surcharge-same-day"
+                    onClick={() => {
+                      if (surchargeType === 'SAME_DAY') {
+                        setSurchargeType('NONE');
+                      } else {
+                        setSurchargeType('SAME_DAY');
+                        const now = new Date();
+                        setSelectedDueDate(now);
+                      }
+                    }}
+                    className={`p-2 rounded-lg border text-left transition flex flex-col justify-between cursor-pointer ${
+                      surchargeType === 'SAME_DAY'
+                        ? 'bg-rose-100/90 border-rose-500 ring-2 ring-rose-300 text-rose-950 shadow-2xs font-semibold'
+                        : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100 hover:border-slate-400'
                     }`}
                   >
-                    Same Day (+50%)
-                  </button>
+                    <div>
+                      <div className="font-bold text-[11px] leading-tight flex items-center justify-between">
+                        <span>Same Day</span>
+                        {surchargeType === 'SAME_DAY' && <Check className="w-3 h-3 text-rose-700" />}
+                      </div>
+                      <div className="text-[9px] text-slate-500 mt-0.5">Express Delivery</div>
+                    </div>
+                    <div
+                      className="mt-1 flex items-center gap-1 w-fit"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <span className={`text-[9.5px] font-bold ${surchargeType === 'SAME_DAY' ? 'text-rose-950' : 'text-slate-500'}`}>
+                        +₹
+                      </span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0"
+                        value={effectiveSameDayPrice === 0 ? '' : effectiveSameDayPrice}
+                        title="Click to edit Same Day Price"
+                        onFocus={(e) => {
+                          e.target.select();
+                          if (surchargeType !== 'SAME_DAY') {
+                            setSurchargeType('SAME_DAY');
+                            const now = new Date();
+                            setSelectedDueDate(now);
+                          }
+                        }}
+                        onChange={(e) => {
+                          const cleaned = e.target.value.replace(/[^0-9.]/g, '').replace(/^0+(?=\d)/, '');
+                          const num = cleaned === '' ? 0 : parseFloat(cleaned);
+                          const val = isNaN(num) ? 0 : num;
+                          setSameDayPrice(val);
+                          setIsSameDayPriceManuallyEdited(true);
+                          if (surchargeType !== 'SAME_DAY') {
+                            setSurchargeType('SAME_DAY');
+                            const now = new Date();
+                            setSelectedDueDate(now);
+                          }
+                          try {
+                            localStorage.setItem('trendera_sameday_price', String(val));
+                            localStorage.setItem('trendera_sameday_custom', 'true');
+                          } catch {}
+                        }}
+                        className={`w-14 px-1 py-0.5 text-center font-mono font-bold text-xs rounded border outline-none shadow-2xs transition ${
+                          surchargeType === 'SAME_DAY'
+                            ? 'bg-white border-rose-500 text-rose-950 focus:ring-1 focus:ring-rose-600'
+                            : 'bg-slate-50 border-slate-300 text-slate-700 hover:bg-white focus:bg-white focus:ring-1 focus:ring-slate-400'
+                        }`}
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -2496,7 +2752,7 @@ export const DropScreen: React.FC = () => {
 
                 {calculatedSurcharge > 0 && (
                   <div className="flex justify-between text-amber-700 font-medium">
-                    <span>Surcharge ({surchargeType.replace(/_/g, ' ')}):</span>
+                    <span>Surcharge ({(surchargeType || 'NONE').replace(/_/g, ' ')}):</span>
                     <span className="font-mono font-bold">+₹{calculatedSurcharge.toFixed(2)}</span>
                   </div>
                 )}
@@ -2715,7 +2971,7 @@ export const DropScreen: React.FC = () => {
                   ) : (
                     <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300 flex items-center gap-1">
                       <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
-                      Inactive • Manager Select Required
+                      Inactive • Selection Required
                     </span>
                   )}
                 </div>
@@ -3016,12 +3272,21 @@ export const DropScreen: React.FC = () => {
                     return;
                   }
 
-                  let formattedDueDate = new Date().toISOString().split('T')[0];
+                  let formattedDueDate: string;
                   try {
                     if (selectedDueDate instanceof Date && !isNaN(selectedDueDate.getTime())) {
-                      formattedDueDate = selectedDueDate.toISOString().split('T')[0];
+                      const y = selectedDueDate.getFullYear();
+                      const m = String(selectedDueDate.getMonth() + 1).padStart(2, '0');
+                      const d = String(selectedDueDate.getDate()).padStart(2, '0');
+                      formattedDueDate = `${y}-${m}-${d}`;
+                    } else {
+                      const now = new Date();
+                      formattedDueDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
                     }
-                  } catch {}
+                  } catch {
+                    const now = new Date();
+                    formattedDueDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                  }
 
                   const nextNum = editingOrder?.orderNumber || (Math.max(...orders.map(o => o.orderNumber), 0) + 1);
 
@@ -3055,7 +3320,9 @@ export const DropScreen: React.FC = () => {
                     deliveryCharge: effectiveDeliveryCharge,
                     hasDeliveryCharge: isDeliveryApplied,
                     isPickAndDrop: pickAndDropType === 'DOORSTEP_PICK_DROP',
-                    pickAndDropType: pickAndDropType || 'COUNTER_WALKIN',
+                    pickAndDropType: pickAndDropType || undefined,
+                    deliveryType: surchargeType === 'SAME_DAY' ? 'SAME_DAY' : (surchargeType === 'NEXT_DAY' ? 'NEXT_DAY' : 'NORMAL'),
+                    deliveryDate: formattedDueDate,
                     grossAmount: itemsGrossAmount,
                     discountAmount: calculatedDiscount,
                     discountPercent: discountPercent,

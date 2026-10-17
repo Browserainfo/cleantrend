@@ -67,23 +67,49 @@ export function buildPublicReceiptUrl(order: Order, businessSettings: BusinessSe
  * Formats a due date into the clean Indian standard format: 'DD MMM YYYY' (e.g. '26 Aug 2026')
  */
 export function formatWhatsAppDueDate(dateStr?: string): string {
-  if (!dateStr) return '26 Aug 2026';
+  if (!dateStr || !dateStr.trim()) return '26 Aug 2026';
   
-  const ddmonyyyyMatch = dateStr.match(/^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})/);
-  if (ddmonyyyyMatch) {
-    return `${parseInt(ddmonyyyyMatch[1], 10)} ${ddmonyyyyMatch[2]} ${ddmonyyyyMatch[3]}`;
+  const trimmed = dateStr.trim();
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  // 1. Direct match for "YYYY-MM-DD" or "YYYY/MM/DD" (prevents UTC timezone shift bug e.g. 2026-10-19 -> 18 Oct)
+  const ymdMatch = trimmed.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  if (ymdMatch) {
+    const year = parseInt(ymdMatch[1], 10);
+    const monthIdx = parseInt(ymdMatch[2], 10) - 1;
+    const day = parseInt(ymdMatch[3], 10);
+    const monthName = months[monthIdx] || 'Oct';
+    return `${day} ${monthName} ${year}`;
   }
 
-  const d = new Date(dateStr);
+  // 2. Direct match for "DD MMM YYYY" or "DD-MMM-YYYY"
+  const ddmonyyyyMatch = trimmed.match(/^(\d{1,2})\s+([A-Za-z]{3,9})\s+(\d{4})/);
+  if (ddmonyyyyMatch) {
+    const day = parseInt(ddmonyyyyMatch[1], 10);
+    const mStr = ddmonyyyyMatch[2].substring(0, 3);
+    const mCapitalized = mStr.charAt(0).toUpperCase() + mStr.slice(1).toLowerCase();
+    return `${day} ${mCapitalized} ${ddmonyyyyMatch[3]}`;
+  }
+
+  // 3. Direct match for "DD/MM/YYYY" or "DD-MM-YYYY"
+  const dmyMatch = trimmed.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+  if (dmyMatch) {
+    const day = parseInt(dmyMatch[1], 10);
+    const monthIdx = parseInt(dmyMatch[2], 10) - 1;
+    const year = parseInt(dmyMatch[3], 10);
+    const monthName = months[monthIdx] || 'Oct';
+    return `${day} ${monthName} ${year}`;
+  }
+
+  const d = new Date(trimmed);
   if (!isNaN(d.getTime())) {
     const day = d.getDate();
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const month = months[d.getMonth()];
     const year = d.getFullYear();
     return `${day} ${month} ${year}`;
   }
 
-  return dateStr;
+  return trimmed;
 }
 
 /**

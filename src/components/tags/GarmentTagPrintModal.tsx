@@ -21,7 +21,8 @@ import {
   PieceTagData, 
   generatePieceTagsForOrder, 
   printPiece2RTags, 
-  generate2RMatrixSVG 
+  generate2RMatrixSVG,
+  isSameDayOrder 
 } from '../../utils/pieceTagUtils';
 import { Order } from '../../types';
 
@@ -158,12 +159,22 @@ export const GarmentTagPrintModal: React.FC<{
         </div>
 
         {/* Rule Highlight Notice Bar */}
-        <div className="bg-sky-50 border-b border-sky-200 px-4 py-2 flex flex-wrap items-center justify-between gap-2 text-xs text-sky-950">
+        <div className={`border-b px-4 py-2 flex flex-wrap items-center justify-between gap-2 text-xs ${
+          isSameDayOrder(order) 
+            ? 'bg-rose-50 border-rose-200 text-rose-950' 
+            : 'bg-sky-50 border-sky-200 text-sky-950'
+        }`}>
           <div className="flex items-center gap-2">
-            <Info className="w-4 h-4 text-sky-600 shrink-0" />
-            <span>
-              <strong>Delivery Date Rule:</strong> Tag date shows <strong className="text-sky-900 bg-sky-100 px-1.5 py-0.5 rounded font-mono font-bold">{currentPreviewTag?.tagDeliveryDate}</strong> (Calculated as 1 day earlier than CRM Due Date: <em>{order.dueDate}</em>).
-            </span>
+            <Info className={`w-4 h-4 shrink-0 ${isSameDayOrder(order) ? 'text-rose-600' : 'text-sky-600'}`} />
+            {isSameDayOrder(order) ? (
+              <span>
+                <strong className="text-rose-700">Same Day Delivery:</strong> Tag date shows <strong className="text-rose-950 bg-rose-100 px-1.5 py-0.5 rounded font-mono font-bold">{currentPreviewTag?.tagDeliveryDate}</strong> (Exact selected delivery date without subtracting any days).
+              </span>
+            ) : (
+              <span>
+                <strong>Delivery Date Rule:</strong> Tag date shows <strong className="text-sky-900 bg-sky-100 px-1.5 py-0.5 rounded font-mono font-bold">{currentPreviewTag?.tagDeliveryDate}</strong> (Calculated as 1 day earlier than CRM Due Date: <em>{order.dueDate}</em>).
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-3 text-[11px] text-slate-600">
             <span>Customer: <strong className="text-slate-900">{order.customerName}</strong></span>
@@ -467,6 +478,10 @@ export const GarmentTagPrintModal: React.FC<{
                     <div className="text-xs">Thermal Tag Roll</div>
                     <div className="text-[10px] text-slate-500 font-normal">38mm × 28mm (Continuous)</div>
                   </button>
+                </div>
+                <div className="bg-emerald-50 border border-emerald-200 rounded p-1.5 text-[10.5px] text-emerald-900 flex items-center justify-between font-medium">
+                  <span>Print Orientation: <strong>Portrait (Straight)</strong></span>
+                  <span className="text-[10px] text-emerald-700 font-mono">38mm × 28mm</span>
                 </div>
               </div>
             </div>

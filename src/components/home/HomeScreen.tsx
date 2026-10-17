@@ -49,6 +49,7 @@ export const HomeScreen: React.FC = () => {
     businessSettings, 
     currentUser,
     currentRole,
+    cancelEditingOrder,
     showToast 
   } = useApp();
 
@@ -215,6 +216,7 @@ export const HomeScreen: React.FC = () => {
     setNewCustNotes('');
 
     if (andStartOrder) {
+      cancelEditingOrder();
       setActiveCustomerId(created.id);
       setActiveView('DROP');
       showToast(`Starting new POS booking for customer ${created.name}`, 'info');
@@ -228,6 +230,7 @@ export const HomeScreen: React.FC = () => {
   };
 
   const handleStartBookingForCust = (cust: Customer) => {
+    cancelEditingOrder();
     setActiveCustomerId(cust.id);
     setActiveView('DROP');
     showToast(`Starting new POS booking for ${cust.name} (${cust.mobile})`, 'info');

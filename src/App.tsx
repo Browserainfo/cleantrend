@@ -121,40 +121,42 @@ const MainAppContent: React.FC = () => {
 
       {/* Primary Workspace Viewport */}
       <main className="flex-1 flex flex-col overflow-hidden min-h-0">
-        {activeView === 'HOME' && <HomeScreen />}
-        {(activeView === 'CUSTOMER' || activeView === 'CUSTOMERS') && <CustomerScreen />}
-        {(activeView === 'ORDERS' || activeView === 'ORDER_LIST' || activeView === 'ORDER_MANAGEMENT') && <OrderManagementScreen />}
-        {(activeView === 'DROP' || activeView === 'ORDER_CREATE') && <DropScreen />}
-        {(activeView === 'PROCESS' || activeView === 'PRINT_QR_TAGS' || activeView === 'PENDING_FINISHING' || activeView === 'PACKING_STICKERS' || activeView === 'WORKSHOP_NOTES') && <ProcessScreen />}
-        {(activeView === 'PICKUP' || activeView === 'DELIVERY') && <DeliveryScreen />}
-        {activeView === 'ACCOUNT' && <AccountScreen />}
-        {(activeView === 'REPORTS' || activeView === 'AUDIT_TRAIL') && <ReportsScreen />}
-        {activeView === 'MASTER_DATA' && <MasterDataScreen />}
-        
-        {/* Role Protected Admin Screen: Only Admin can access */}
-        {(activeView === 'ADMIN' || activeView === 'USERS_PERMISSIONS' || activeView === 'SETTINGS' || activeView === 'USERS') && (
-          currentRole === 'ADMIN' ? (
-            <AdminScreen />
-          ) : (
-            <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-100 text-center">
-              <div className="max-w-md bg-white border border-rose-200 rounded-2xl p-8 shadow-sm text-center">
-                <div className="w-14 h-14 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto mb-4 border border-rose-200">
-                  <ShieldAlert className="w-8 h-8" />
+        <ErrorBoundary inline fallbackTitle="Screen Display Error" fallbackMessage="An error occurred displaying this section. Please try again or switch tabs.">
+          {activeView === 'HOME' && <HomeScreen />}
+          {(activeView === 'CUSTOMER' || activeView === 'CUSTOMERS') && <CustomerScreen />}
+          {(activeView === 'ORDERS' || activeView === 'ORDER_LIST' || activeView === 'ORDER_MANAGEMENT') && <OrderManagementScreen />}
+          {(activeView === 'DROP' || activeView === 'ORDER_CREATE') && <DropScreen />}
+          {(activeView === 'PROCESS' || activeView === 'PRINT_QR_TAGS' || activeView === 'PENDING_FINISHING' || activeView === 'PACKING_STICKERS' || activeView === 'WORKSHOP_NOTES') && <ProcessScreen />}
+          {(activeView === 'PICKUP' || activeView === 'DELIVERY') && <DeliveryScreen />}
+          {activeView === 'ACCOUNT' && <AccountScreen />}
+          {(activeView === 'REPORTS' || activeView === 'AUDIT_TRAIL') && <ReportsScreen />}
+          {activeView === 'MASTER_DATA' && <MasterDataScreen />}
+          
+          {/* Role Protected Admin Screen: Only Admin can access */}
+          {(activeView === 'ADMIN' || activeView === 'USERS_PERMISSIONS' || activeView === 'SETTINGS' || activeView === 'USERS') && (
+            currentRole === 'ADMIN' ? (
+              <AdminScreen />
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-100 text-center">
+                <div className="max-w-md bg-white border border-rose-200 rounded-2xl p-8 shadow-sm text-center">
+                  <div className="w-14 h-14 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto mb-4 border border-rose-200">
+                    <ShieldAlert className="w-8 h-8" />
+                  </div>
+                  <h2 className="text-lg font-bold text-slate-900 mb-2">Access Restricted</h2>
+                  <p className="text-xs text-slate-600 leading-relaxed mb-6">
+                    Administrative controls, user management, and system configuration are strictly reserved for the <strong>ADMIN</strong> role. As a <strong>MANAGER</strong>, you have access to counter operations, customer management, orders, and delivery.
+                  </p>
+                  <button
+                    onClick={() => setActiveView('HOME')}
+                    className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl shadow-xs transition"
+                  >
+                    Return to Counter Desk
+                  </button>
                 </div>
-                <h2 className="text-lg font-bold text-slate-900 mb-2">Access Restricted</h2>
-                <p className="text-xs text-slate-600 leading-relaxed mb-6">
-                  Administrative controls, user management, and system configuration are strictly reserved for the <strong>ADMIN</strong> role. As a <strong>MANAGER</strong>, you have access to counter operations, customer management, orders, and delivery.
-                </p>
-                <button
-                  onClick={() => setActiveView('HOME')}
-                  className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl shadow-xs transition"
-                >
-                  Return to Counter Desk
-                </button>
               </div>
-            </div>
-          )
-        )}
+            )
+          )}
+        </ErrorBoundary>
       </main>
 
       {/* Global Modals & Workflow Windows */}

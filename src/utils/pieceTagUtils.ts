@@ -12,7 +12,8 @@ export interface PieceTagData {
   pieceIndex: number; // 1-based piece sequence (e.g. 1)
   totalPieces: number; // Total pieces in order (e.g. 5)
   crmDueDate: string; // CRM recorded due date (e.g. "17 Aug 2026")
-  tagDeliveryDate: string; // Printed Tag delivery date = CRM Due Date - 1 day (e.g. "16 Aug 2026")
+  tagDeliveryDate: string; // Printed Tag delivery date = CRM Due Date - 1 day (or exact date for Same Day)
+  isSameDay?: boolean; // Whether order is Same Day delivery
   garmentName: string; // e.g. "Shirt"
   garmentCode?: string; // e.g. "SH"
   serviceName: string; // e.g. "Dry Cleaning"
@@ -149,48 +150,92 @@ export const getBusinessPrefix = (businessSettings?: BusinessSettings): string =
 };
 
 /**
- * Automatically calculates Tag Delivery Date as EXACTLY ONE DAY EARLIER than the CRM delivery date.
- * Example: CRM Date "17 Aug 2026" -> Tag Date "16 Aug 2026"
+ * Determines whether an order is a Same Day delivery order based on surchargeType or deliveryType.
  */
-export const calculateTagDeliveryDate = (crmDueDateStr?: string): string => {
+export const isSameDayOrder = (
+  order?: Partial<Order> | { surchargeType?: string; deliveryType?: string; isSameDay?: boolean } | null
+): boolean => {
+  if (!order) return false;
+  if ((order as any).isSameDay === true) return true;
+  const surcharge = (order.surchargeType || '').toString().trim().toUpperCase();
+  const delivery = ((order as any).deliveryType || '').toString().trim().toUpperCase();
+  return (
+    surcharge === 'SAME_DAY' ||
+    surcharge === 'SAME_DAY_URGENT' ||
+    surcharge.includes('SAME_DAY') ||
+    delivery === 'SAME_DAY' ||
+    delivery.includes('SAME_DAY')
+  );
+};
+
+/**
+ * Calculates Tag Delivery Date:
+ * - When SAME DAY is selected: shows the actual selected delivery date WITHOUT subtracting any days.
+ * - For normal orders: keeps the standard one-day-earlier rule (Tag Date = Due Date - 1 day).
+ * Handles timezone-safe parsing to avoid any 1-day offset bugs from UTC conversion.
+ */
+export const calculateTagDeliveryDate = (crmDueDateStr?: string, isSameDay: boolean = false): string => {
   if (!crmDueDateStr || crmDueDateStr.trim() === '') {
     const today = new Date();
-    today.setDate(today.getDate() + 2); // Default fallback: +2 days from now
+    if (!isSameDay) {
+      today.setDate(today.getDate() + 2); // Default fallback: +2 days from now
+    }
     return formatDateDDMMMYYYY(today);
   }
 
-  // 1. Try standard Date parsing
-  let dateObj = new Date(crmDueDateStr);
+  const trimmed = crmDueDateStr.trim();
+  let dateObj: Date | null = null;
 
-  // 2. Custom parser for "DD MMM YYYY" or "DD-MMM-YYYY" or "DD/MM/YYYY"
-  if (isNaN(dateObj.getTime())) {
-    const parts = crmDueDateStr.trim().split(/[\s\-\/]+/);
-    if (parts.length >= 3) {
-      const p0 = parseInt(parts[0], 10);
-      const p1 = parts[1];
-      const p2 = parseInt(parts[2], 10);
+  // 1. Safe regex match for "YYYY-MM-DD" or "YYYY/MM/DD" (prevents UTC timezone shifting bug)
+  const ymdMatch = trimmed.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  if (ymdMatch) {
+    const year = parseInt(ymdMatch[1], 10);
+    const monthIdx = parseInt(ymdMatch[2], 10) - 1;
+    const day = parseInt(ymdMatch[3], 10);
+    dateObj = new Date(year, monthIdx, day);
+  }
 
-      // Check if p1 is month name (e.g. "Aug", "August")
-      const monthIdx = MONTH_NAMES.findIndex(m => m.toLowerCase() === p1.substring(0, 3).toLowerCase());
-      if (monthIdx !== -1 && !isNaN(p0) && !isNaN(p2)) {
-        const year = p2 < 100 ? 2000 + p2 : p2;
-        dateObj = new Date(year, monthIdx, p0);
-      } else if (!isNaN(p0) && !isNaN(parseInt(p1, 10)) && !isNaN(p2)) {
-        // DD/MM/YYYY
-        const m = parseInt(p1, 10) - 1;
-        const year = p2 < 100 ? 2000 + p2 : p2;
-        dateObj = new Date(year, m, p0);
-      }
+  // 2. Safe regex match for "DD MMM YYYY" or "DD-MMM-YYYY"
+  if (!dateObj || isNaN(dateObj.getTime())) {
+    const ddmonyyyyMatch = trimmed.match(/^(\d{1,2})\s+([A-Za-z]{3,9})\s+(\d{4})/);
+    if (ddmonyyyyMatch) {
+      const day = parseInt(ddmonyyyyMatch[1], 10);
+      const mIdx = MONTH_NAMES.findIndex(m => m.toLowerCase() === ddmonyyyyMatch[2].substring(0, 3).toLowerCase());
+      const year = parseInt(ddmonyyyyMatch[3], 10);
+      dateObj = new Date(year, mIdx !== -1 ? mIdx : 0, day);
     }
   }
 
-  if (isNaN(dateObj.getTime())) {
+  // 3. Safe regex match for "DD/MM/YYYY" or "DD-MM-YYYY"
+  if (!dateObj || isNaN(dateObj.getTime())) {
+    const dmyMatch = trimmed.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+    if (dmyMatch) {
+      const day = parseInt(dmyMatch[1], 10);
+      const monthIdx = parseInt(dmyMatch[2], 10) - 1;
+      const year = parseInt(dmyMatch[3], 10);
+      dateObj = new Date(year, monthIdx, day);
+    }
+  }
+
+  // 4. Standard Date parsing fallback
+  if (!dateObj || isNaN(dateObj.getTime())) {
+    dateObj = new Date(trimmed);
+  }
+
+  if (!dateObj || isNaN(dateObj.getTime())) {
     const today = new Date();
-    today.setDate(today.getDate() + 2);
+    if (!isSameDay) {
+      today.setDate(today.getDate() + 2);
+    }
     return formatDateDDMMMYYYY(today);
   }
 
-  // RULE: Subtract exactly 1 day (24 hours) from the CRM Delivery Date
+  // SAME DAY RULE: If Same Day is selected, return the actual selected delivery date WITHOUT subtracting any days!
+  if (isSameDay) {
+    return formatDateDDMMMYYYY(dateObj);
+  }
+
+  // NORMAL ORDERS RULE: Subtract exactly 1 day (24 hours) from the CRM Delivery Date
   dateObj.setDate(dateObj.getDate() - 1);
   return formatDateDDMMMYYYY(dateObj);
 };
@@ -213,13 +258,15 @@ export const generatePieceTagsForOrder = (
 ): PieceTagData[] => {
   if (!order) return [];
 
+  const isSameDay = isSameDayOrder(order);
   const tags: PieceTagData[] = [];
 
   const bizName = getEffectiveBusinessName(businessSettings);
   const bizPrefix = getBusinessPrefix(businessSettings);
   const orderNum = order.orderNumber || 1;
   const orderCode = `${bizPrefix}-${orderNum.toString().padStart(3, '0')}`;
-  const tagDeliveryDate = calculateTagDeliveryDate(order.dueDate);
+  // Correctly apply Same Day (no day subtracted) or normal (1 day subtracted)
+  const tagDeliveryDate = calculateTagDeliveryDate(order.dueDate, isSameDay);
 
   const rawItems = Array.isArray(order.items) ? order.items : [];
   
@@ -252,6 +299,7 @@ export const generatePieceTagsForOrder = (
         totalPieces: totalPiecesCount,
         crmDueDate: order.dueDate || '',
         tagDeliveryDate: tagDeliveryDate,
+        isSameDay: isSameDay,
         garmentName: item.garmentName || 'Garment Item',
         garmentCode: garmentCodePart,
         serviceName: item.serviceName || 'Dry Cleaning',
@@ -572,15 +620,25 @@ export const printPiece2RTags = (
 
   const styles = `
     @page {
-      size: 38mm 28mm !important;
+      size: 38mm 28mm;
+      size: 38mm 28mm portrait;
+      orientation: portrait;
       margin: 0 !important;
       padding: 0 !important;
     }
     @media print {
       @page {
-        size: 38mm 28mm !important;
+        size: 38mm 28mm;
+        size: 38mm 28mm portrait;
+        orientation: portrait;
         margin: 0 !important;
         padding: 0 !important;
+      }
+      @page :first {
+        size: 38mm 28mm;
+        size: 38mm 28mm portrait;
+        orientation: portrait;
+        margin: 0 !important;
       }
       *, *::before, *::after {
         box-sizing: border-box !important;
@@ -589,6 +647,7 @@ export const printPiece2RTags = (
       }
       html, body {
         width: 38mm !important;
+        height: 28mm !important;
         margin: 0 !important;
         padding: 0 !important;
         background: #ffffff !important;

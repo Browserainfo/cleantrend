@@ -23,7 +23,8 @@ import {
   Play,
   RefreshCw,
   QrCode,
-  Trash2
+  Trash2,
+  Truck
 } from 'lucide-react';
 import { BusinessSettings } from '../../types';
 import { printBridgeService, BridgeStatus, PrinterDevice } from '../../services/printBridgeService';
@@ -830,6 +831,107 @@ export const BusinessSettingsModal: React.FC<{ isOpen: boolean; onClose: () => v
                     Mask customer mobile phone on thermal receipts (e.g. ****7124) for privacy
                   </span>
                 </label>
+              </div>
+
+              {/* Express Delivery & Surcharge Pricing Settings */}
+              <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                  <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                    <Truck className="w-4 h-4 text-sky-600" />
+                    <span>Delivery & Express Surcharge Pricing</span>
+                  </h4>
+                  <span className="text-[11px] text-slate-500 font-medium">Configurable without changing code</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Same Day Delivery / Surcharge (₹)
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-2.5 top-2 text-slate-400 font-bold text-xs">₹</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        disabled={isManager}
+                        value={formData.sameDayDeliveryPrice ?? 400}
+                        onChange={(e) => handleInputChange('sameDayDeliveryPrice', parseFloat(e.target.value) || 0)}
+                        placeholder="e.g. 400"
+                        className="w-full pl-6 pr-2 py-1.5 border border-slate-300 rounded font-mono font-bold text-xs text-slate-900 disabled:bg-slate-100"
+                      />
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-0.5">
+                      Base price for Same Day delivery. Also directly editable by Admin on the POS Same Day button.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Next Day Delivery / Surcharge (₹)
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-2.5 top-2 text-slate-400 font-bold text-xs">₹</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        disabled={isManager}
+                        value={formData.nextDayDeliveryPrice ?? 200}
+                        onChange={(e) => handleInputChange('nextDayDeliveryPrice', parseFloat(e.target.value) || 0)}
+                        placeholder="e.g. 200"
+                        className="w-full pl-6 pr-2 py-1.5 border border-slate-300 rounded font-mono font-bold text-xs text-slate-900 disabled:bg-slate-100"
+                      />
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-0.5">
+                      Base price for Next Day delivery. Also directly editable by Admin on the POS Next Day button.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Home Delivery Charge (₹)
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-2.5 top-2 text-slate-400 font-bold text-xs">₹</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        disabled={isManager}
+                        value={formData.homeDeliveryPrice ?? 50}
+                        onChange={(e) => handleInputChange('homeDeliveryPrice', parseFloat(e.target.value) || 0)}
+                        placeholder="e.g. 50"
+                        className="w-full pl-6 pr-2 py-1.5 border border-slate-300 rounded font-mono font-bold text-xs text-slate-900 disabled:bg-slate-100"
+                      />
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-0.5">
+                      Default charge for customer doorstep delivery.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Pick & Drop Rider Charge (₹)
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-2.5 top-2 text-slate-400 font-bold text-xs">₹</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        disabled={isManager}
+                        value={formData.pickDropPrice ?? 50}
+                        onChange={(e) => handleInputChange('pickDropPrice', parseFloat(e.target.value) || 0)}
+                        placeholder="e.g. 50"
+                        className="w-full pl-6 pr-2 py-1.5 border border-slate-300 rounded font-mono font-bold text-xs text-slate-900 disabled:bg-slate-100"
+                      />
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-0.5">
+                      Default charge for rider pickup & doorstep drop.
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           )}

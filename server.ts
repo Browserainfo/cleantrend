@@ -247,11 +247,8 @@ function loadDatabase(): StorageData {
         }
       }
 
-      // Ensure initial Manager exists
-      const hasManager = users.some(u => u.role === 'MANAGER');
-      if (!hasManager) {
-        users.push(getInitialUsers()[1]);
-      }
+      // Note: Only seed initial manager if the database was completely empty (handled in getInitialUsers).
+      // Do not automatically re-add a manager if an admin deliberately deleted all managers.
 
       // Ensure all users have valid bcrypt password hashes and active status
       users = users.map(u => {
@@ -288,8 +285,40 @@ function loadDatabase(): StorageData {
         }
       }
 
+      const sanitizedOrders: any[] = (Array.isArray(rawOrders) ? rawOrders : []).map((o: any) => {
+        const items = (Array.isArray(o.items) ? o.items : []).map((it: any, idx: number) => ({
+          ...it,
+          id: it.id || `it-${idx + 1}`,
+          barcode: it.barcode || `${o.branchCode || 'TE02'}-${o.orderNumber || 0}-${idx + 1}`,
+          garmentName: it.garmentName || 'Garment',
+          status: it.status || 'RECEIVED',
+          quantity: Number(it.quantity) || 1,
+          totalItemPrice: Number(it.totalItemPrice) || Number(it.unitPrice) || 0
+        }));
+        const payments = Array.isArray(o.payments) ? o.payments : [];
+        const gross = Number(o.grossAmount) || items.reduce((s: number, i: any) => s + (Number(i.totalItemPrice) || 0), 0) || Number(o.netAmount) || 0;
+        const net = Number(o.netAmount) || gross;
+        const adv = Number(o.advancePaid) || payments.reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0) || 0;
+        const bal = o.balanceDue !== undefined ? Number(o.balanceDue) : Math.max(0, net - adv);
+
+        return {
+          ...o,
+          status: o.status || 'RECEIVED',
+          items,
+          payments,
+          grossAmount: gross,
+          netAmount: net,
+          advancePaid: adv,
+          balanceDue: bal,
+          customerName: o.customerName || 'Customer',
+          customerMobile: o.customerMobile || '',
+          orderDate: o.orderDate || new Date().toISOString().split('T')[0],
+          dueDate: o.dueDate || new Date().toISOString().split('T')[0]
+        };
+      });
+
       return {
-        orders: rawOrders,
+        orders: sanitizedOrders,
         customers: Array.isArray(parsed.customers) && parsed.customers.length > 0 ? parsed.customers : initialCustomers,
         settings: parsed.settings || initialBusinessSettings,
         users,
@@ -1503,6 +1532,50 @@ app.post('/api/users/:id/toggle-active', requireAuth, requireRole('ADMIN'), (req
 
   saveDatabase();
   res.json({ success: true, user: sanitizeUser(user) });
+});
+
+// DELETE /api/users/:id - Delete a user account (ADMIN only)
+app.delete('/api/users/:id', requireAuth, requireRole('ADMIN'), (req, res) => {
+  const userId = req.params.id;
+  const user = db.users.find(u => u.id === userId || u.username?.toLowerCase() === userId.toLowerCase());
+
+  if (!user) {
+    return res.status(404).json({ success: false, error: 'User not found.' });
+  }
+
+  // Prevent deleting the primary/active Admin accounts
+  if (user.role === 'ADMIN') {
+    const adminCount = db.users.filter(u => u.role === 'ADMIN').length;
+    if (adminCount <= 1 || user.username.toLowerCase() === 'admin') {
+      return res.status(400).json({ success: false, error: 'The primary Administrator account cannot be deleted.' });
+    }
+  }
+
+  // Prevent user from deleting themselves
+  const sessionToken = extractSessionToken(req);
+  const currentSession = sessionToken && db.sessions ? db.sessions[sessionToken] : null;
+  if (currentSession && currentSession.userId === user.id) {
+    return res.status(400).json({ success: false, error: 'You cannot delete your own logged-in account.' });
+  }
+
+  // Remove user from db
+  db.users = db.users.filter(u => u.id !== user.id);
+
+  // Invalidate any active sessions for this user
+  if (db.sessions) {
+    Object.keys(db.sessions).forEach(tok => {
+      if (db.sessions[tok].userId === user.id) {
+        delete db.sessions[tok];
+      }
+    });
+  }
+
+  saveDatabase();
+  res.json({ 
+    success: true, 
+    message: `User "${user.name}" (@${user.username}) has been permanently deleted.`,
+    deletedUserId: user.id 
+  });
 });
 
 // -------------------------------------------------------------

@@ -43,7 +43,11 @@ export const initialBusinessSettings: BusinessSettings = {
   paymentQrUrl: '/payment-qr.jpg',
   upiId: 'smarthub.2988354@hdfcbank',
   upiPayeeName: 'Trendera Dry Cleaning',
-  includeQrInWhatsApp: false
+  includeQrInWhatsApp: false,
+  sameDayDeliveryPrice: 400,
+  nextDayDeliveryPrice: 200,
+  homeDeliveryPrice: 50,
+  pickDropPrice: 50
 };
 
 export const serviceDefinitions: ServiceDefinition[] = [

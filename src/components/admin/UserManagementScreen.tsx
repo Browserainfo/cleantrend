@@ -34,6 +34,7 @@ export const UserManagementScreen: React.FC = () => {
     currentRole, 
     addUser, 
     updateUserStatus, 
+    deleteUser,
     resetUserPassword,
     refreshUsers,
     showToast 
@@ -63,6 +64,11 @@ export const UserManagementScreen: React.FC = () => {
   const [selectedUserForReset, setSelectedUserForReset] = useState<User | null>(null);
   const [resetNewPassword, setResetNewPassword] = useState<string>('');
   const [isSubmittingReset, setIsSubmittingReset] = useState<boolean>(false);
+
+  // Delete User Confirmation Modal State
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
+  const [userToDelete, setUserToDelete] = useState<User | null>(null);
+  const [isDeletingUser, setIsDeletingUser] = useState<boolean>(false);
 
   // Sync users on mount
   useEffect(() => {
@@ -159,6 +165,37 @@ export const UserManagementScreen: React.FC = () => {
       }
     } finally {
       setIsSubmittingReset(false);
+    }
+  };
+
+  const handleOpenDelete = (user: User) => {
+    if (isManager) {
+      showToast('SECURITY: Only Admin can delete user accounts.', 'error');
+      return;
+    }
+    if (user.role === 'ADMIN') {
+      showToast('SECURITY: Administrator accounts cannot be deleted.', 'error');
+      return;
+    }
+    if (currentUser?.id === user.id) {
+      showToast('SECURITY: You cannot delete your own logged-in account.', 'error');
+      return;
+    }
+    setUserToDelete(user);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!userToDelete) return;
+    setIsDeletingUser(true);
+    try {
+      const res = await deleteUser(userToDelete.id);
+      if (res.success) {
+        setIsDeleteModalOpen(false);
+        setUserToDelete(null);
+      }
+    } finally {
+      setIsDeletingUser(false);
     }
   };
 
@@ -386,9 +423,9 @@ export const UserManagementScreen: React.FC = () => {
                       
                       {!isManager && u.role !== 'ADMIN' && (
                         <button
-                          onClick={() => updateUserStatus(u.id, false)}
+                          onClick={() => handleOpenDelete(u)}
                           className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition cursor-pointer"
-                          title="Deactivate user"
+                          title="Delete user permanently"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -593,6 +630,74 @@ export const UserManagementScreen: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE USER CONFIRMATION MODAL */}
+      {isDeleteModalOpen && userToDelete && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 border border-slate-300 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+              <div className="flex items-center gap-2 text-rose-600">
+                <Trash2 className="w-5 h-5" />
+                <h3 className="font-bold text-slate-900 text-sm">Delete User Account</h3>
+              </div>
+              <button 
+                onClick={() => { if (!isDeletingUser) setIsDeleteModalOpen(false); }} 
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs text-slate-600">
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-start gap-2.5">
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold text-rose-900">Are you sure you want to delete this user?</p>
+                  <p className="text-[11px] text-rose-700 mt-0.5">
+                    This will permanently remove the user login from the database and immediately terminate any active sessions.
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-1">
+                <div>User: <strong className="text-slate-900">{userToDelete.name}</strong></div>
+                <div className="text-[11px] text-slate-500 font-mono">@{userToDelete.username} ({userToDelete.role})</div>
+                <div className="text-[11px] text-slate-500">Store: {userToDelete.assignedStore || 'All Branches'}</div>
+                <div className="text-[11px] text-slate-500">Mobile: {userToDelete.mobile || 'N/A'}</div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={() => setIsDeleteModalOpen(false)}
+                disabled={isDeletingUser}
+                className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-semibold cursor-pointer text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={isDeletingUser}
+                className="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded font-bold shadow-xs cursor-pointer text-xs disabled:opacity-60 flex items-center gap-1.5"
+              >
+                {isDeletingUser ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Delete User</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -227,3 +227,23 @@ export async function toggleUserActiveApi(
     return { success: false, error: err.message || 'Network error updating user status' };
   }
 }
+
+export async function deleteUserApi(
+  id: string
+): Promise<{ success: boolean; message?: string; error?: string }> {
+  try {
+    const res = await fetch(`/api/users/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+      credentials: 'include',
+    });
+
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      return { success: false, error: data.error || 'Failed to delete user' };
+    }
+    return { success: true, message: data.message };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Network error deleting user' };
+  }
+}

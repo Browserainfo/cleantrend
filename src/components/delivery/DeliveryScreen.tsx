@@ -24,7 +24,8 @@ import {
   Edit2,
   AlertCircle,
   Check,
-  X
+  X,
+  Package
 } from 'lucide-react';
 import { OrderGarmentItem, PaymentTransaction } from '../../types';
 
@@ -33,6 +34,7 @@ export const DeliveryScreen: React.FC = () => {
     selectedOrder, 
     orders, 
     setActiveOrderId,
+    setActiveView,
     completeDelivery, 
     recordGarmentReturn, 
     resendPaymentLink,
@@ -46,24 +48,31 @@ export const DeliveryScreen: React.FC = () => {
     currentRole,
     currentUser,
     businessSettings,
+    cancelEditingOrder,
     showToast
   } = useApp();
 
-  const order = selectedOrder || orders[0];
+  const order = selectedOrder || orders[0] || null;
+  const orderItems = order?.items || [];
 
   // Selected garments for delivery (default to all items selected as shown in Screenshot 14)
   const [selectedBarcodes, setSelectedBarcodes] = useState<string[]>(() => {
-    return order.items.map(i => i.barcode);
+    return orderItems.map(i => i.barcode);
   });
 
   // Keep selected barcodes in sync when active order changes
   React.useEffect(() => {
-    setSelectedBarcodes(order.items.map(i => i.barcode));
-    setDeliveryNotes(order.deliveryNotes || '');
-  }, [order.id]);
+    if (order?.items) {
+      setSelectedBarcodes(order.items.map(i => i.barcode));
+      setDeliveryNotes(order.deliveryNotes || '');
+    } else {
+      setSelectedBarcodes([]);
+      setDeliveryNotes('');
+    }
+  }, [order?.id]);
 
   const [barcodeInput, setBarcodeInput] = useState<string>('');
-  const [deliveryNotes, setDeliveryNotes] = useState<string>(order.deliveryNotes || '');
+  const [deliveryNotes, setDeliveryNotes] = useState<string>(order?.deliveryNotes || '');
   const [showBanner, setShowBanner] = useState<boolean>(true);
   
   // Modals for delivery screen
@@ -80,8 +89,8 @@ export const DeliveryScreen: React.FC = () => {
   const [isCustomerDetailsModalOpen, setIsCustomerDetailsModalOpen] = useState<boolean>(false);
 
   // Counters
-  const totalCount = order.items.length;
-  const deliveredCount = order.items.filter(i => i.status === 'DELIVERED').length;
+  const totalCount = orderItems.length;
+  const deliveredCount = orderItems.filter(i => i.status === 'DELIVERED').length;
   const selectedCount = selectedBarcodes.length;
 
   // Toggle single garment selection
@@ -95,21 +104,21 @@ export const DeliveryScreen: React.FC = () => {
 
   // Toggle master select all
   const toggleSelectAll = () => {
-    if (selectedBarcodes.length === order.items.length) {
+    if (selectedBarcodes.length === orderItems.length) {
       setSelectedBarcodes([]);
     } else {
-      setSelectedBarcodes(order.items.map(i => i.barcode));
+      setSelectedBarcodes(orderItems.map(i => i.barcode));
     }
   };
 
   // Handle scanning barcode
   const handleBarcodeScan = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!barcodeInput.trim()) return;
+    if (!barcodeInput.trim() || !order) return;
 
     const query = barcodeInput.trim();
     // Match against items
-    const matched = order.items.find(i => {
+    const matched = orderItems.find(i => {
       const bc = i.barcode || '';
       return bc.toLowerCase() === query.toLowerCase() || 
              bc.replace(/-/g, '') === query.replace(/-/g, '');
@@ -123,24 +132,25 @@ export const DeliveryScreen: React.FC = () => {
         showToast(`Garment ${matched.barcode} already in delivery selection.`, 'info');
       }
     } else {
-      showToast(`No garment found in order #${order.orderNumber} matching barcode "${query}".`, 'warning');
+      showToast(`No garment found in order #${order?.orderNumber} matching barcode "${query}".`, 'warning');
     }
     setBarcodeInput('');
   };
 
   // Compute amount due for selected garments
-  const selectedItems = order.items.filter(i => selectedBarcodes.includes(i.barcode));
-  const totalItemPieces = order.items.reduce((acc, item) => acc + (item.quantity || 1), 0) || totalCount || 1;
+  const selectedItems = orderItems.filter(i => selectedBarcodes.includes(i.barcode));
+  const totalItemPieces = orderItems.reduce((acc, item) => acc + (item.quantity || 1), 0) || totalCount || 1;
   const selectedItemPieces = selectedItems.reduce((acc, item) => acc + (item.quantity || 1), 0) || selectedCount;
 
   // When order is fully paid, collection amount is 0.00
   // When all items are selected for delivery, collection amount is order.balanceDue
   // When partially selected, amount is proportional share of the unpaid balanceDue (capped at balanceDue)
-  const calculatedCollectionAmount = order.balanceDue <= 0
+  const currentBalanceDue = Number(order?.balanceDue || 0);
+  const calculatedCollectionAmount = currentBalanceDue <= 0
     ? 0
     : (selectedCount === totalCount || selectedItemPieces >= totalItemPieces)
-    ? Number(order.balanceDue.toFixed(2))
-    : Number(Math.min(order.balanceDue, (selectedItemPieces / totalItemPieces) * order.balanceDue).toFixed(2));
+    ? Number(currentBalanceDue.toFixed(2))
+    : Number(Math.min(currentBalanceDue, (selectedItemPieces / totalItemPieces) * currentBalanceDue).toFixed(2));
 
   // Handle Accept Payment and Deliver
   const handleOpenPaymentAndDeliver = () => {
@@ -193,6 +203,26 @@ export const DeliveryScreen: React.FC = () => {
     if (name.includes('SAREE') || name.includes('Dress')) return 'text-rose-600 bg-rose-100 border-rose-300';
     return 'text-slate-600 bg-slate-100 border-slate-300';
   };
+
+  if (!order) {
+    return (
+      <div className="flex-1 bg-slate-100 flex flex-col items-center justify-center p-8 text-slate-500">
+        <Package className="w-12 h-12 text-slate-300 mb-3" />
+        <h2 className="text-base font-bold text-slate-700">No Orders in System</h2>
+        <p className="text-xs text-slate-500 mt-1">Please create an order first from the Drop counter.</p>
+        <button
+          onClick={() => {
+            cancelEditingOrder();
+            setActiveOrderId('');
+            setActiveView('DROP');
+          }}
+          className="mt-4 px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded font-bold text-xs cursor-pointer shadow-xs"
+        >
+          Go to Drop (Create Order)
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 bg-slate-100 flex flex-col min-h-screen text-slate-800">
@@ -274,7 +304,7 @@ export const DeliveryScreen: React.FC = () => {
               title="Open dedicated full-screen QR scan handover & pickup counter screen"
             >
               <QrCode className="w-3.5 h-3.5" />
-              <span>Dedicated QR Pickup Counter</span>
+              <span>Dedicated QR Delivery Counter</span>
             </button>
 
             {/* Delivered Counter */}
@@ -424,8 +454,24 @@ export const DeliveryScreen: React.FC = () => {
 
                       {/* Ready On: Timestamp + Staff Attribution */}
                       <td className="p-2.5 text-slate-600 text-[11px]">
-                        <div>{item.readyOn || '27-Nov-25 2:58 PM'}</div>
-                        <div className="text-slate-400 text-[10px] font-mono">{item.readyBy || 'manan'}</div>
+                        {item.readyOn ? (
+                          <div>
+                            <div className="font-medium text-slate-800">{item.readyOn}</div>
+                            <div className="text-slate-400 text-[10px] font-mono">{item.readyBy || order.createdBy || 'staff'}</div>
+                          </div>
+                        ) : item.status === 'DELIVERED' ? (
+                          <div>
+                            <div className="font-medium text-slate-800">{item.deliveredOn || order.orderDate}</div>
+                            <div className="text-slate-400 text-[10px] font-mono">{item.deliveredBy || order.createdBy || 'staff'}</div>
+                          </div>
+                        ) : item.status === 'READY' ? (
+                          <div>
+                            <div className="font-medium text-slate-800">{order.orderDate}</div>
+                            <div className="text-slate-400 text-[10px] font-mono">{order.createdBy || 'staff'}</div>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 italic">In Process</span>
+                        )}
                       </td>
 
                       {/* Delivered On */}
@@ -433,7 +479,7 @@ export const DeliveryScreen: React.FC = () => {
                         {item.deliveredOn ? (
                           <div className="text-emerald-700 font-semibold">
                             <div>{item.deliveredOn}</div>
-                            <div className="text-[10px] text-slate-400">{item.deliveredBy || 'manan'}</div>
+                            <div className="text-[10px] text-slate-400">{item.deliveredBy || order.createdBy || 'staff'}</div>
                           </div>
                         ) : (
                           <span className="text-slate-400 italic">--</span>
@@ -599,25 +645,25 @@ export const DeliveryScreen: React.FC = () => {
             <div className="space-y-2 py-2 text-xs flex-1">
               <div className="flex items-center justify-between text-slate-300">
                 <span>Gross</span>
-                <span className="font-mono font-semibold text-sm text-white">{order.grossAmount.toFixed(2)}</span>
+                <span className="font-mono font-semibold text-sm text-white">{(Number(order.grossAmount) || 0).toFixed(2)}</span>
               </div>
 
               <div className="flex items-center justify-between text-slate-200 font-bold border-t border-slate-500/50 pt-1">
                 <span>Net</span>
-                <span className="font-mono text-base text-white">{order.netAmount.toFixed(2)}</span>
+                <span className="font-mono text-base text-white">{(Number(order.netAmount) || 0).toFixed(2)}</span>
               </div>
 
               <div className="flex items-center justify-between text-slate-300">
                 <span>- Paid</span>
                 <span className="font-mono font-semibold text-sm text-white">
-                  {(order.advancePaid + order.payments.reduce((sum, p) => sum + p.amount, 0)).toFixed(2)}
+                  {((Number(order.advancePaid) || 0) + (Array.isArray(order.payments) ? order.payments : []).reduce((sum, p) => sum + (Number(p?.amount) || 0), 0)).toFixed(2)}
                 </span>
               </div>
 
               <div className="flex items-center justify-between text-white font-extrabold text-sm border-t border-slate-500 pt-1.5">
                 <span className="text-slate-100">Balance Due</span>
                 <span className="font-mono text-xl text-emerald-300 tracking-tight">
-                  {order.balanceDue.toFixed(2)}
+                  {(Number(order.balanceDue) || 0).toFixed(2)}
                 </span>
               </div>
             </div>
@@ -636,8 +682,8 @@ export const DeliveryScreen: React.FC = () => {
                 
                 <div className="bg-slate-800/80 p-2 rounded border border-slate-600">
                   <div className="text-[10px] text-slate-400 uppercase font-medium">Current Due</div>
-                  <div className={`text-lg font-extrabold font-mono ${order.balanceDue > 0 ? 'text-rose-400' : 'text-emerald-300'}`}>
-                    {order.balanceDue.toFixed(2)}
+                  <div className={`text-lg font-extrabold font-mono ${(Number(order.balanceDue) || 0) > 0 ? 'text-rose-400' : 'text-emerald-300'}`}>
+                    {(Number(order.balanceDue) || 0).toFixed(2)}
                   </div>
                 </div>
               </div>
@@ -783,8 +829,8 @@ export const DeliveryScreen: React.FC = () => {
                 </div>
                 <div className="text-right">
                   <div className="text-slate-500">Balance Due</div>
-                  <div className={`text-lg font-bold font-mono ${order.balanceDue > 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
-                    Rs. {order.balanceDue.toFixed(2)}
+                  <div className={`text-lg font-bold font-mono ${(Number(order.balanceDue) || 0) > 0 ? 'text-rose-600' : 'text-emerald-700'}`}>
+                    Rs. {(Number(order.balanceDue) || 0).toFixed(2)}
                   </div>
                 </div>
               </div>
@@ -792,13 +838,13 @@ export const DeliveryScreen: React.FC = () => {
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block font-semibold text-slate-700">Collection Amount (Rs.):</label>
-                  {order.balanceDue <= 0 ? (
+                  {(Number(order.balanceDue) || 0) <= 0 ? (
                     <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
                       Paid in Full • No Due
                     </span>
                   ) : (
                     <span className="text-[10px] text-slate-500">
-                      Remaining Due: Rs. {order.balanceDue.toFixed(2)}
+                      Remaining Due: Rs. {(Number(order.balanceDue) || 0).toFixed(2)}
                     </span>
                   )}
                 </div>
@@ -816,7 +862,7 @@ export const DeliveryScreen: React.FC = () => {
               {/* PAYMENT DIFFERENCE OPTIONS: Adjust/Waive vs Carry Forward */}
               {(() => {
                 const currentPaymentAmt = parseFloat(paymentAmountInput) || 0;
-                const paymentDifference = Number((order.balanceDue - currentPaymentAmt).toFixed(2));
+                const paymentDifference = Number(((Number(order.balanceDue) || 0) - currentPaymentAmt).toFixed(2));
                 if (currentPaymentAmt <= 0 || paymentDifference <= 0) return null;
 
                 return (
@@ -827,7 +873,7 @@ export const DeliveryScreen: React.FC = () => {
                         <span>Payment Difference: ₹{paymentDifference.toFixed(2)}</span>
                       </div>
                       <span className="text-[11px] text-amber-800 font-medium">
-                        Bill ₹{order.balanceDue.toFixed(2)} • Paying ₹{currentPaymentAmt.toFixed(2)}
+                        Bill ₹{(Number(order.balanceDue) || 0).toFixed(2)} • Paying ₹{currentPaymentAmt.toFixed(2)}
                       </span>
                     </div>
 

@@ -51,6 +51,7 @@ import {
   updateManagerApi,
   resetPasswordApi,
   toggleUserActiveApi,
+  deleteUserApi,
   getAuthHeaders,
 } from '../services/authService';
 
@@ -78,6 +79,7 @@ interface AppContextType {
     canDeliverOrders?: boolean;
   }) => Promise<{ success: boolean; message?: string; user?: User }>;
   updateUserStatus: (userId: string, isActive: boolean) => Promise<{ success: boolean; message?: string }>;
+  deleteUser: (userId: string) => Promise<{ success: boolean; message?: string }>;
   resetUserPassword: (userId: string, newPassword: string) => Promise<{ success: boolean; message?: string }>;
   refreshUsers: () => Promise<void>;
   switchRole: (role: UserRole) => void;
@@ -281,15 +283,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             fixedBalanceDue = Math.max(0, fixedNetAmount - realAdvance);
           }
 
+          const sanitizedItems = (Array.isArray(o.items) ? o.items : []).map((it: any, idx: number) => ({
+            ...it,
+            id: it.id || `it-${idx + 1}`,
+            barcode: it.barcode || `${o.branchCode || 'TE02'}-${o.orderNumber || 0}-${idx + 1}`,
+            garmentName: it.garmentName || 'Garment',
+            status: it.status || 'RECEIVED',
+            quantity: Number(it.quantity) || 1,
+            totalItemPrice: Number(it.totalItemPrice) || Number(it.unitPrice) || 0
+          }));
+
           return {
             ...o,
-            grossAmount: fixedGross,
-            discountAmount: fixedDiscountAmt,
-            netAmount: fixedNetAmount,
-            roundOff: fixedRoundOff,
-            advancePaid: realAdvance,
-            balanceDue: fixedBalanceDue,
+            status: o.status || 'RECEIVED',
+            items: sanitizedItems,
+            grossAmount: Number(fixedGross) || 0,
+            discountAmount: Number(fixedDiscountAmt) || 0,
+            netAmount: Number(fixedNetAmount) || 0,
+            roundOff: Number(fixedRoundOff) || 0,
+            advancePaid: Number(realAdvance) || 0,
+            balanceDue: Number(fixedBalanceDue) || 0,
             payments: realPayments,
+            customerName: o.customerName || 'Customer',
+            customerMobile: o.customerMobile || '',
             branchCode: o.branchCode === 'DC02' ? 'TE02' : (o.branchCode || 'TE02'),
             receiptUrl: o.receiptUrl
               ?.replace('qdc5.quickdrycleaning.com/PaymentLinkTesting/InvoiceDetails.aspx', 'cleanera.app/portal/invoice')
@@ -453,9 +469,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       .then(res => res.json())
       .then(data => {
         if (data.success && Array.isArray(data.orders) && data.orders.length > 0) {
+          const sanitizedFetched = data.orders.map((o: any) => ({
+            ...o,
+            status: o.status || 'RECEIVED',
+            items: (Array.isArray(o.items) ? o.items : []).map((it: any, idx: number) => ({
+              ...it,
+              id: it.id || `it-${idx + 1}`,
+              barcode: it.barcode || `${o.branchCode || 'TE02'}-${o.orderNumber || 0}-${idx + 1}`,
+              garmentName: it.garmentName || 'Garment',
+              status: it.status || 'RECEIVED',
+              quantity: Number(it.quantity) || 1,
+              totalItemPrice: Number(it.totalItemPrice) || Number(it.unitPrice) || 0
+            })),
+            payments: Array.isArray(o.payments) ? o.payments : [],
+            grossAmount: Number(o.grossAmount) || 0,
+            netAmount: Number(o.netAmount) || 0,
+            balanceDue: Number(o.balanceDue) || 0,
+            advancePaid: Number(o.advancePaid) || 0,
+            customerName: o.customerName || 'Customer',
+            customerMobile: o.customerMobile || ''
+          }));
+
           setOrders(prev => {
             const map = new Map<string, Order>();
-            data.orders.forEach((o: Order) => map.set(o.id, o));
+            sanitizedFetched.forEach((o: Order) => map.set(o.id, o));
             prev.forEach(o => {
               if (!map.has(o.id)) map.set(o.id, o);
             });
@@ -493,6 +530,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           });
         }
       })
+    // Synchronize customers with backend server database
+    fetch('/api/customers', {
+      headers: getAuthHeaders(),
+      credentials: 'include'
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && Array.isArray(data.customers) && data.customers.length > 0) {
+          setCustomers(prev => {
+            const map = new Map<string, Customer>();
+            data.customers.forEach((c: Customer) => map.set(c.id, c));
+            prev.forEach(c => {
+              if (!map.has(c.id)) map.set(c.id, c);
+            });
+            return Array.from(map.values());
+          });
+        }
+      })
       .catch(err => {
         // Silent fallback
       });
@@ -500,9 +555,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [activeView, setActiveView] = useState<string>('HOME'); // Default to HOME screen for operational counter staff landing
   const [activeOrderId, setActiveOrderId] = useState<string>('');
-  const [activeCustomerId, setActiveCustomerId] = useState<string>(() => {
-    return initialCustomers[0]?.id || 'cust-1';
-  });
+  const [activeCustomerId, setActiveCustomerId] = useState<string>('');
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
   const [editingOrderData, setEditingOrderData] = useState<Order | null>(null);
 
@@ -856,6 +909,56 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: true };
     }
     showToast(res.error || 'Failed to update user status.', 'error');
+    return { success: false, message: res.error };
+  };
+
+  const deleteUser = async (userId: string) => {
+    if (currentRole !== 'ADMIN') {
+      showToast('SECURITY: Only Admin can delete user accounts.', 'error');
+      return { success: false, message: 'Forbidden' };
+    }
+
+    const targetUser = users.find(u => u.id === userId);
+    if (!targetUser) {
+      showToast('User not found.', 'error');
+      return { success: false, message: 'User not found' };
+    }
+
+    if (targetUser.role === 'ADMIN') {
+      showToast('SECURITY: Administrator accounts cannot be deleted.', 'error');
+      return { success: false, message: 'Administrator accounts cannot be deleted' };
+    }
+
+    if (currentUser?.id === targetUser.id) {
+      showToast('SECURITY: You cannot delete your own logged-in account.', 'error');
+      return { success: false, message: 'Cannot delete current user' };
+    }
+
+    const res = await deleteUserApi(userId);
+    if (res.success) {
+      setUsers(prev => {
+        const nextUsers = prev.filter(u => u.id !== userId);
+        try {
+          localStorage.setItem('cleanera_all_users', JSON.stringify(nextUsers));
+        } catch (e) {}
+        return nextUsers;
+      });
+
+      addAuditLog({
+        action: 'DELETE_USER',
+        changedBy: `${currentUser?.name || 'Admin'} (${currentUser?.username || 'admin'})`,
+        userRole: 'ADMIN',
+        fieldName: 'User Accounts',
+        previousValue: `${targetUser.name} (@${targetUser.username})`,
+        newValue: 'Deleted',
+        reason: `Admin deleted user ${targetUser.username}`
+      });
+
+      showToast(`User "${targetUser.name}" has been permanently deleted.`, 'success');
+      return { success: true };
+    }
+
+    showToast(res.error || 'Failed to delete user.', 'error');
     return { success: false, message: res.error };
   };
 
@@ -1252,6 +1355,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       hasDeliveryCharge: orderData.hasDeliveryCharge || false,
       isPickAndDrop: orderData.isPickAndDrop || false,
       pickAndDropType: orderData.pickAndDropType || 'COUNTER_WALKIN',
+      deliveryType: orderData.deliveryType || (orderData.surchargeType === 'SAME_DAY' ? 'SAME_DAY' : (orderData.surchargeType === 'NEXT_DAY' ? 'NEXT_DAY' : 'NORMAL')),
+      deliveryDate: orderData.deliveryDate || orderData.dueDate,
       grossAmount: gross,
       discountAmount: discount,
       discountPercent: orderData.discountPercent || 0,
@@ -1443,7 +1548,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const rawTotal = Math.max(0, newGross + delivery + surcharge - order.discountAmount);
     const roundedNet = Math.round(rawTotal);
     const roundOff = Number((roundedNet - rawTotal).toFixed(2));
-    const paidSum = order.payments.reduce((acc, p) => acc + p.amount, 0) + order.advancePaid;
+    const paidSum = (Array.isArray(order.payments) ? order.payments : []).reduce((acc, p) => acc + (Number(p?.amount) || 0), 0) + (Number(order.advancePaid) || 0);
     const newBal = Math.max(0, roundedNet - paidSum);
 
     const updatedOrder: Order = {
@@ -1494,7 +1599,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const rawTotal = Math.max(0, order.grossAmount + delivery + surcharge - newDiscountAmt);
     const roundedNet = Math.round(rawTotal);
     const roundOff = Number((roundedNet - rawTotal).toFixed(2));
-    const paidSum = order.payments.reduce((acc, p) => acc + p.amount, 0) + order.advancePaid;
+    const paidSum = (Array.isArray(order.payments) ? order.payments : []).reduce((acc, p) => acc + (Number(p?.amount) || 0), 0) + (Number(order.advancePaid) || 0);
     const newBal = Math.max(0, roundedNet - paidSum);
 
     const updatedOrder: Order = {
@@ -1686,7 +1791,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       status: newStatus,
       differenceAction: differenceAction || o.differenceAction,
       differenceAmount: differenceAction ? differenceAmount : o.differenceAmount,
-      payments: [...o.payments, newPayment]
+      payments: [...(Array.isArray(o.payments) ? o.payments : []), newPayment]
     } : o));
 
     // Update customer outstanding and adjustment balance
@@ -1827,8 +1932,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const now = new Date();
     const formatted = `${now.getDate().toString().padStart(2, '0')}-${now.toLocaleString('default', { month: 'short' })}-${now.getFullYear().toString().slice(-2)} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 
-    let newPayments = [...order.payments];
-    let newBal = order.balanceDue;
+    let newPayments = [...(Array.isArray(order.payments) ? order.payments : [])];
+    let newBal = Number(order.balanceDue) || 0;
 
     if (paymentAmount && paymentAmount > 0) {
       const newPay: PaymentTransaction = {
@@ -1841,18 +1946,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         collectedBy: authUserName
       };
       newPayments.push(newPay);
-      newBal = Math.max(0, order.balanceDue - paymentAmount);
+      newBal = Math.max(0, (Number(order.balanceDue) || 0) - paymentAmount);
     }
 
     if (differenceAction === 'WAIVE' || differenceAction === 'CARRY_FORWARD') {
       newBal = 0; // Mark order settled
     }
 
-    const updatedItems = order.items.map(item => {
+    const updatedItems = (Array.isArray(order.items) ? order.items : []).map(item => {
       if (deliveredBarcodes.includes(item.barcode)) {
         return {
           ...item,
           status: 'DELIVERED' as const,
+          readyOn: item.readyOn || formatted,
+          readyBy: item.readyBy || authUsername,
           deliveredOn: formatted,
           deliveredBy: authUsername
         };
@@ -1929,7 +2036,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         changedBy: `${authUserName} (${authUserRole})`,
         userRole: authUserRole,
         fieldName: 'Garment Handover & QR Pickup',
-        previousValue: `${order.items.filter(i => i.status === 'DELIVERED').length} delivered`,
+        previousValue: `${(Array.isArray(order.items) ? order.items : []).filter(i => i.status === 'DELIVERED').length} delivered`,
         newValue: `${deliveredBarcodes.length} garments handed over to customer`,
         reason: signatureData ? 'Customer signature verified on glass' : 'Direct counter handover'
       });
@@ -1960,7 +2067,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateGarmentPressingMethod = (orderId: string, barcode: string, pressingMethod: PressingMethod) => {
     setOrders(prev => prev.map(order => {
       if (order.id === orderId || order.orderNumber.toString() === orderId) {
-        const updatedItems = order.items.map(item => {
+        const updatedItems = (Array.isArray(order.items) ? order.items : []).map(item => {
           if (item.barcode === barcode) {
             return { ...item, pressingMethod };
           }
@@ -1990,7 +2097,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateGarmentDetails = (orderId: string, barcode: string, updates: Partial<OrderGarmentItem>) => {
     setOrders(prev => prev.map(order => {
       if (order.id === orderId || order.orderNumber.toString() === orderId) {
-        const updatedItems = order.items.map(item => {
+        const updatedItems = (Array.isArray(order.items) ? order.items : []).map(item => {
           if (item.barcode === barcode) {
             return { ...item, ...updates };
           }
@@ -2007,12 +2114,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const order = orders.find(o => o.id === orderId);
     if (!order) return;
 
-    const item = order.items.find(i => i.barcode === barcode);
+    const item = (Array.isArray(order.items) ? order.items : []).find(i => i.barcode === barcode);
     if (!item) return;
 
     const now = new Date().toLocaleDateString();
 
-    const updatedItems = order.items.map(i => i.barcode === barcode ? {
+    const updatedItems = (Array.isArray(order.items) ? order.items : []).map(i => i.barcode === barcode ? {
       ...i,
       status: 'RETURNED' as const,
       returnedOn: now,
@@ -2059,6 +2166,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setCustomers(prev => [newCust, ...prev]);
+    setActiveCustomerId(newCust.id);
+
+    // Persist new customer to backend database
+    fetch('/api/customers', {
+      method: 'POST',
+      headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(newCust)
+    }).catch(err => {
+      console.warn('Customer backend sync note:', err);
+    });
+
     showToast(`Customer ${newCust.name} (${newCust.mobile}) created successfully.`, 'success');
     return newCust;
   };
@@ -2325,6 +2444,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       logout,
       addUser,
       updateUserStatus,
+      deleteUser,
       resetUserPassword,
       refreshUsers,
       switchRole,

@@ -91,7 +91,7 @@ export const SignatureModal: React.FC<{ isOpen: boolean; onClose: () => void }> 
     }
 
     const signatureDataUrl = canvas.toDataURL('image/png');
-    completeDelivery(order.id, order.items.map(i => i.barcode), signatureDataUrl);
+    completeDelivery(order.id, (Array.isArray(order.items) ? order.items : []).map(i => i.barcode), signatureDataUrl);
     showToast(`Customer signature recorded for Order #${order.orderNumber}. Handover closed.`, 'success');
     onClose();
   };
@@ -118,7 +118,7 @@ export const SignatureModal: React.FC<{ isOpen: boolean; onClose: () => void }> 
         <div className="p-6 space-y-4 text-xs">
           <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 flex justify-between items-center text-slate-700">
             <span>Handover Verification:</span>
-            <strong className="text-slate-900 font-bold">{order.items.length} Garments Ready</strong>
+            <strong className="text-slate-900 font-bold">{order.totalPieces || (Array.isArray(order.items) ? order.items.length : 0)} Garments Ready</strong>
           </div>
 
           <div className="space-y-1">

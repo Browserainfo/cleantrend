@@ -1,6 +1,73 @@
 {
   "orders": [
     {
+      "id": "ord-9905",
+      "orderNumber": 9905,
+      "branchCode": "TE02",
+      "orderSeries": "*9905-2*",
+      "orderType": "PER_PIECES",
+      "customerId": "cust-1792055113640",
+      "customerName": "testing",
+      "customerMobile": "+919815173400",
+      "customerAddress": "banur, Noida",
+      "customerPlaceOfSupply": "C2 Sector 1 Noida",
+      "items": [
+        {
+          "id": "item-1792055130203-1",
+          "barcode": "9905-1-2",
+          "garmentName": "Blazer",
+          "serviceName": "Dry Cleaning",
+          "serviceCode": "DC",
+          "quantity": 1,
+          "unitPrice": 350,
+          "totalItemPrice": 350,
+          "status": "RECEIVED",
+          "pressingMethod": "Iron Press"
+        },
+        {
+          "id": "item-1792055134459-2",
+          "barcode": "9905-2-2",
+          "garmentName": "Achkan Very Heavy",
+          "serviceName": "Dry Cleaning",
+          "serviceCode": "DC",
+          "quantity": 1,
+          "unitPrice": 450,
+          "totalItemPrice": 450,
+          "status": "RECEIVED",
+          "pressingMethod": "Iron Press"
+        }
+      ],
+      "totalPieces": 2,
+      "totalWeightKg": 0,
+      "deliveryCharge": 0,
+      "hasDeliveryCharge": false,
+      "isPickAndDrop": false,
+      "pickAndDropType": "COUNTER_WALKIN",
+      "grossAmount": 800,
+      "discountAmount": 0,
+      "discountPercent": 0,
+      "surchargeAmount": 400,
+      "surchargeType": "SAME_DAY",
+      "deliveryType": "SAME_DAY",
+      "deliveryDate": "2026-10-19",
+      "taxRatePercent": 0,
+      "taxAmount": 0,
+      "roundOff": 0,
+      "netAmount": 1200,
+      "advancePaid": 0,
+      "balanceDue": 1200,
+      "previousOrderPending": 0,
+      "payments": [],
+      "status": "RECEIVED",
+      "orderDate": "15 Oct 2026 2:38:32 PM",
+      "dueDate": "2026-10-19",
+      "workshopNotes": "",
+      "deliveryNotes": "",
+      "receiptUrl": "https://crm.trenderacleaners.com/portal/invoice?Reciept=TE02-9905-1200-cust1792055113640-386",
+      "createdAt": "2026-10-15T09:08:32.748Z",
+      "createdBy": "rajesh"
+    },
+    {
       "id": "ord-9904",
       "orderNumber": 9904,
       "branchCode": "TE02",
@@ -14,37 +81,27 @@
       "items": [
         {
           "id": "item-1791801255944-1",
-          "garmentSequence": 1,
           "barcode": "9904-1-2",
-          "garmentCode": "DK",
           "garmentName": "Dhoti Kurta",
-          "category": "MEN",
-          "serviceCode": "DC",
           "serviceName": "Dry Cleaning",
+          "serviceCode": "DC",
           "quantity": 1,
-          "basePrice": 260,
-          "subServices": [],
+          "unitPrice": 260,
           "totalItemPrice": 260,
-          "remarks": [],
-          "pressingMethod": "Iron Press",
-          "status": "RECEIVED"
+          "status": "RECEIVED",
+          "pressingMethod": "Iron Press"
         },
         {
           "id": "item-1791801262110-2",
-          "garmentSequence": 2,
           "barcode": "9904-2-2",
-          "garmentCode": "BLB",
           "garmentName": "Bridal Lehnga Blouse",
-          "category": "WOMEN",
-          "serviceCode": "SP",
           "serviceName": "Steam Press",
+          "serviceCode": "SP",
           "quantity": 1,
-          "basePrice": 60,
-          "subServices": [],
+          "unitPrice": 60,
           "totalItemPrice": 60,
-          "remarks": [],
-          "pressingMethod": "Iron Press",
-          "status": "RECEIVED"
+          "status": "RECEIVED",
+          "pressingMethod": "Iron Press"
         }
       ],
       "totalPieces": 2,
@@ -99,71 +156,51 @@
       "items": [
         {
           "id": "item-1791801089799-1",
-          "garmentSequence": 1,
           "barcode": "9903-1-2",
-          "garmentCode": "Shi",
           "garmentName": "Shirt",
-          "category": "WOMEN",
-          "serviceCode": "SP",
           "serviceName": "Steam Press",
+          "serviceCode": "SP",
           "quantity": 1,
-          "basePrice": 40,
-          "subServices": [],
+          "unitPrice": 40,
           "totalItemPrice": 40,
-          "remarks": [],
-          "pressingMethod": "Iron Press",
-          "status": "RECEIVED"
+          "status": "RECEIVED",
+          "pressingMethod": "Iron Press"
         },
         {
           "id": "item-1791801093542-2",
-          "garmentSequence": 2,
           "barcode": "9903-2-2",
-          "garmentCode": "BHW",
           "garmentName": "Blouse Heavy",
-          "category": "WOMEN",
-          "serviceCode": "SP",
           "serviceName": "Steam Press",
+          "serviceCode": "SP",
           "quantity": 1,
-          "basePrice": 30,
-          "subServices": [],
+          "unitPrice": 30,
           "totalItemPrice": 30,
-          "remarks": [],
-          "pressingMethod": "Iron Press",
-          "status": "RECEIVED"
+          "status": "RECEIVED",
+          "pressingMethod": "Iron Press"
         },
         {
           "id": "item-1791801097159-3",
-          "garmentSequence": 3,
           "barcode": "9903-3-2",
-          "garmentCode": "K",
           "garmentName": "Kurta",
-          "category": "MEN",
-          "serviceCode": "DC",
           "serviceName": "Dry Cleaning",
+          "serviceCode": "DC",
           "quantity": 1,
-          "basePrice": 100,
-          "subServices": [],
+          "unitPrice": 100,
           "totalItemPrice": 100,
-          "remarks": [],
-          "pressingMethod": "Iron Press",
-          "status": "RECEIVED"
+          "status": "RECEIVED",
+          "pressingMethod": "Iron Press"
         },
         {
           "id": "item-1791801099087-4",
-          "garmentSequence": 4,
           "barcode": "9903-4-2",
-          "garmentCode": "BLZ",
           "garmentName": "Blazer",
-          "category": "MEN",
-          "serviceCode": "DC",
           "serviceName": "Dry Cleaning",
+          "serviceCode": "DC",
           "quantity": 1,
-          "basePrice": 350,
-          "subServices": [],
+          "unitPrice": 350,
           "totalItemPrice": 350,
-          "remarks": [],
-          "pressingMethod": "Iron Press",
-          "status": "RECEIVED"
+          "status": "RECEIVED",
+          "pressingMethod": "Iron Press"
         }
       ],
       "totalPieces": 4,
@@ -206,33 +243,27 @@
       "items": [
         {
           "id": "item-10",
-          "garmentSequence": 1,
           "barcode": "9902-1-2",
           "garmentName": "Shirt",
-          "category": "MEN",
-          "serviceCode": "DC",
           "serviceName": "Dry Clean",
+          "serviceCode": "DC",
           "quantity": 2,
-          "basePrice": 99,
+          "unitPrice": 198,
           "totalItemPrice": 198,
-          "subServices": [],
-          "remarks": [],
-          "status": "RECEIVED"
+          "status": "RECEIVED",
+          "pressingMethod": "Steam Press"
         },
         {
           "id": "item-11",
-          "garmentSequence": 2,
           "barcode": "9902-2-2",
           "garmentName": "Shirt",
-          "category": "MEN",
-          "serviceCode": "SP",
           "serviceName": "Steam Press",
+          "serviceCode": "SP",
           "quantity": 3,
-          "basePrice": 45,
+          "unitPrice": 135,
           "totalItemPrice": 135,
-          "subServices": [],
-          "remarks": [],
-          "status": "RECEIVED"
+          "status": "RECEIVED",
+          "pressingMethod": "Steam Press"
         }
       ],
       "totalPieces": 5,
@@ -245,7 +276,8 @@
       "hasDeliveryCharge": false,
       "orderDate": "12 Oct 2026",
       "dueDate": "2026-10-16",
-      "createdBy": "rajesh_manager"
+      "createdBy": "rajesh_manager",
+      "payments": []
     },
     {
       "id": "ord-test-admin-1791796191413",
@@ -259,33 +291,27 @@
       "items": [
         {
           "id": "item-1",
-          "garmentSequence": 1,
           "barcode": "9901-1-2",
           "garmentName": "Achkan",
-          "category": "MEN",
-          "serviceCode": "DC",
           "serviceName": "Dry Clean",
+          "serviceCode": "DC",
           "quantity": 1,
-          "basePrice": 298,
+          "unitPrice": 298,
           "totalItemPrice": 298,
-          "subServices": [],
-          "remarks": [],
-          "status": "RECEIVED"
+          "status": "RECEIVED",
+          "pressingMethod": "Steam Press"
         },
         {
           "id": "item-2",
-          "garmentSequence": 2,
           "barcode": "9901-2-2",
           "garmentName": "Achkan",
-          "category": "MEN",
-          "serviceCode": "SP",
           "serviceName": "Steam Press",
+          "serviceCode": "SP",
           "quantity": 1,
-          "basePrice": 90,
+          "unitPrice": 90,
           "totalItemPrice": 90,
-          "subServices": [],
-          "remarks": [],
-          "status": "RECEIVED"
+          "status": "RECEIVED",
+          "pressingMethod": "Steam Press"
         }
       ],
       "totalPieces": 2,
@@ -298,7 +324,8 @@
       "hasDeliveryCharge": false,
       "orderDate": "12 Oct 2026",
       "dueDate": "2026-10-16",
-      "createdBy": "admin"
+      "createdBy": "admin",
+      "payments": []
     },
     {
       "id": "ord-test-manager-999",
@@ -313,11 +340,23 @@
       "items": [
         {
           "id": "it-1",
+          "barcode": "TE02-999-1",
           "garmentName": "Shirt",
+          "serviceName": "Dry Clean",
+          "serviceCode": "DC",
           "quantity": 1,
-          "totalItemPrice": 200
+          "unitPrice": 200,
+          "totalItemPrice": 200,
+          "status": "RECEIVED",
+          "pressingMethod": "Steam Press"
         }
-      ]
+      ],
+      "status": "RECEIVED",
+      "payments": [],
+      "grossAmount": 200,
+      "advancePaid": 0,
+      "orderDate": "2026-10-15",
+      "dueDate": "2026-10-15"
     },
     {
       "id": "ord-61",
@@ -333,20 +372,15 @@
       "items": [
         {
           "id": "item-1790157139795-1",
-          "garmentSequence": 1,
           "barcode": "61-1-2",
-          "garmentCode": "CA",
           "garmentName": "Capri",
-          "category": "MEN",
-          "serviceCode": "DC",
           "serviceName": "Dry Cleaning",
+          "serviceCode": "DC",
           "quantity": 1,
-          "basePrice": 100,
-          "subServices": [],
+          "unitPrice": 100,
           "totalItemPrice": 100,
-          "remarks": [],
-          "pressingMethod": "Iron Press",
-          "status": "RECEIVED"
+          "status": "RECEIVED",
+          "pressingMethod": "Iron Press"
         }
       ],
       "totalPieces": 1,
@@ -405,20 +439,15 @@
       "items": [
         {
           "id": "item-1790156356814-1",
-          "garmentSequence": 1,
           "barcode": "60-1-2",
-          "garmentCode": "K",
           "garmentName": "Kurta",
-          "category": "MEN",
-          "serviceCode": "DC",
           "serviceName": "Dry Cleaning",
+          "serviceCode": "DC",
           "quantity": 1,
-          "basePrice": 100,
-          "subServices": [],
+          "unitPrice": 100,
           "totalItemPrice": 100,
-          "remarks": [],
-          "pressingMethod": "Iron Press",
-          "status": "RECEIVED"
+          "status": "RECEIVED",
+          "pressingMethod": "Iron Press"
         }
       ],
       "totalPieces": 1,
@@ -476,27 +505,15 @@
       "items": [
         {
           "id": "weight-item-1790154953984-1",
-          "garmentSequence": 1,
           "barcode": "59-1-2",
-          "garmentCode": "WSI",
           "garmentName": "Wash & Steam Iron (WSI) (WSI)",
-          "category": "HOUSEHOLD",
-          "serviceCode": "LD",
           "serviceName": "Wash & Steam Iron (WSI) @ ₹125/kg",
+          "serviceCode": "LD",
           "quantity": 6,
-          "weightKg": 3,
-          "ratePerKg": 125,
-          "weightServiceCode": "WSI",
-          "basePrice": 375,
-          "subServices": [],
+          "unitPrice": 375,
           "totalItemPrice": 375,
-          "remarks": [
-            "Weight: 3 kg",
-            "Est. Pieces: 6",
-            "Rate: ₹125/kg"
-          ],
-          "pressingMethod": "Steam Press",
-          "status": "RECEIVED"
+          "status": "RECEIVED",
+          "pressingMethod": "Steam Press"
         }
       ],
       "totalPieces": 6,
@@ -573,94 +590,51 @@
       "items": [
         {
           "id": "item-4-1",
-          "garmentSequence": 1,
           "barcode": "4-1-2",
           "garmentName": "Men - T SHIRT",
-          "category": "MEN",
-          "serviceCode": "DC",
           "serviceName": "Dry Cleaning",
+          "serviceCode": "DC",
           "quantity": 1,
-          "basePrice": 100,
-          "subServices": [],
+          "unitPrice": 100,
           "totalItemPrice": 100,
-          "remarks": [],
-          "pressingMethod": "Steam Press",
           "status": "READY",
-          "readyOn": "27-Nov-25 2:58 PM",
-          "readyBy": "manan"
+          "pressingMethod": "Steam Press"
         },
         {
           "id": "item-4-2",
-          "garmentSequence": 2,
           "barcode": "4-2-2",
           "garmentName": "Men - JEANS",
-          "category": "MEN",
-          "serviceCode": "DC",
           "serviceName": "Dry Cleaning",
+          "serviceCode": "DC",
           "quantity": 1,
-          "basePrice": 120,
-          "subServices": [],
+          "unitPrice": 120,
           "totalItemPrice": 120,
-          "remarks": [],
-          "pressingMethod": "Iron Press",
-          "brand": "Bernshaw",
           "status": "READY",
-          "readyOn": "27-Nov-25 2:58 PM",
-          "readyBy": "manan"
+          "pressingMethod": "Iron Press"
         },
         {
           "id": "item-4-3",
-          "garmentSequence": 3,
           "barcode": "4-3-2",
           "garmentName": "Men - JACKET",
-          "category": "MEN",
-          "serviceCode": "DC",
           "serviceName": "Dry Cleaning",
+          "serviceCode": "DC",
           "quantity": 1,
-          "basePrice": 300,
-          "subServices": [],
+          "unitPrice": 300,
           "totalItemPrice": 300,
-          "remarks": [
-            "On Hanger"
-          ],
-          "pressingMethod": "Steam Press",
           "status": "READY",
-          "readyOn": "27-Nov-25 2:58 PM",
-          "readyBy": "manan"
+          "pressingMethod": "Steam Press"
         },
         {
           "id": "item-4-4",
-          "garmentSequence": 4,
           "barcode": "4-4-2",
           "garmentName": "Women - SAREE",
-          "category": "WOMEN",
-          "serviceCode": "DC",
           "serviceName": "Dry Cleaning, Starch, Steam Press, Alteration",
+          "serviceCode": "DC",
           "quantity": 1,
-          "basePrice": 250,
-          "subServices": [
-            {
-              "code": "ST",
-              "name": "Starch",
-              "price": 50
-            },
-            {
-              "code": "SP",
-              "name": "Steam Press",
-              "price": 50
-            },
-            {
-              "code": "ALT",
-              "name": "Alteration",
-              "price": 40
-            }
-          ],
+          "unitPrice": 390,
           "totalItemPrice": 390,
-          "remarks": [],
-          "pressingMethod": "Iron Press",
           "status": "READY",
-          "readyOn": "27-Nov-25 2:58 PM",
-          "readyBy": "manan"
+          "pressingMethod": "Iron Press"
         }
       ]
     },
@@ -709,44 +683,49 @@
       "items": [
         {
           "id": "item-2-1",
-          "garmentSequence": 1,
           "barcode": "2-1-2",
           "garmentName": "Men - SHIRT",
-          "category": "MEN",
-          "serviceCode": "DC",
           "serviceName": "Dry Cleaning",
+          "serviceCode": "DC",
           "quantity": 2,
-          "basePrice": 220,
-          "subServices": [],
+          "unitPrice": 220,
           "totalItemPrice": 220,
-          "remarks": [],
-          "pressingMethod": "Iron Press",
           "status": "DELIVERED",
-          "deliveredOn": "24-Nov-25 5:30 PM",
-          "deliveredBy": "rajesh_manager"
+          "pressingMethod": "Iron Press"
         },
         {
           "id": "item-2-2",
-          "garmentSequence": 2,
           "barcode": "2-2-2",
           "garmentName": "Men - TROUSER",
-          "category": "MEN",
-          "serviceCode": "DC",
           "serviceName": "Dry Cleaning",
+          "serviceCode": "DC",
           "quantity": 2,
-          "basePrice": 260,
-          "subServices": [],
+          "unitPrice": 260,
           "totalItemPrice": 260,
-          "remarks": [],
-          "pressingMethod": "Iron Press",
           "status": "DELIVERED",
-          "deliveredOn": "24-Nov-25 5:30 PM",
-          "deliveredBy": "rajesh_manager"
+          "pressingMethod": "Iron Press"
         }
       ]
     }
   ],
   "customers": [
+    {
+      "id": "cust-1792055113640",
+      "custCode": "Cust113",
+      "name": "testing",
+      "mobile": "+919815173400",
+      "email": "",
+      "address": "banur, Noida",
+      "area": "banur",
+      "placeOfSupply": "C2 Sector 1 Noida",
+      "gstNumber": "",
+      "outstandingAmount": 0,
+      "pendingOrdersCount": 0,
+      "totalOrdersCount": 0,
+      "lastVisit": "0 Day ago",
+      "notes": "",
+      "createdAt": "2026-10-15T09:05:13.640Z"
+    },
     {
       "id": "cust-62",
       "custCode": "Cust62",
@@ -849,7 +828,7 @@
       "avatarInitial": "A",
       "createdAt": "2026-09-09T13:00:22.960Z",
       "updatedAt": "2026-09-09T13:00:22.960Z",
-      "lastLoginAt": "2026-10-12T10:40:46.578Z"
+      "lastLoginAt": "2026-10-15T09:17:37.672Z"
     },
     {
       "id": "usr-manager-1",
@@ -995,6 +974,41 @@
       "username": "admin",
       "createdAt": "2026-10-12T10:40:46.578Z",
       "expiresAt": "2026-10-19T10:40:46.578Z"
+    },
+    "d737ba04a18ee3d03c4928722e6af5c35cf61e39d769a4886232320d7f549843": {
+      "userId": "usr-admin-1",
+      "role": "ADMIN",
+      "username": "admin",
+      "createdAt": "2026-10-13T08:54:22.044Z",
+      "expiresAt": "2026-10-20T08:54:22.044Z"
+    },
+    "c4aeb093e29018eed044a649d577b253f3c02c28899ae5933d904d0351dbb74a": {
+      "userId": "usr-admin-1",
+      "role": "ADMIN",
+      "username": "admin",
+      "createdAt": "2026-10-13T08:54:42.247Z",
+      "expiresAt": "2026-10-20T08:54:42.247Z"
+    },
+    "1724fcc020b01f9538c4e58138da8798f7fa38a710c934f4e33488d0bbb43df1": {
+      "userId": "usr-admin-1",
+      "role": "ADMIN",
+      "username": "admin",
+      "createdAt": "2026-10-14T07:11:38.453Z",
+      "expiresAt": "2026-10-21T07:11:38.453Z"
+    },
+    "aa7fd3b3df40dcef94685a13b35ace9225dd4c5b3f1833bb2c01c7326df7ef3f": {
+      "userId": "usr-admin-1",
+      "role": "ADMIN",
+      "username": "admin",
+      "createdAt": "2026-10-15T09:02:14.572Z",
+      "expiresAt": "2026-10-22T09:02:14.572Z"
+    },
+    "193b9b0b956b26755015b75333fb20b590ec3c42c5d5ddaf56738936619eb3bf": {
+      "userId": "usr-admin-1",
+      "role": "ADMIN",
+      "username": "admin",
+      "createdAt": "2026-10-15T09:17:37.672Z",
+      "expiresAt": "2026-10-22T09:17:37.672Z"
     }
   },
   "articleUsageCounts": {
@@ -1011,8 +1025,9 @@
     "saree": 1,
     "achkan": 2,
     "blouse heavy": 3,
-    "blazer": 3,
+    "blazer": 6,
     "dhoti kurta": 3,
-    "bridal lehnga blouse": 3
+    "bridal lehnga blouse": 3,
+    "achkan very heavy": 3
   }
 }

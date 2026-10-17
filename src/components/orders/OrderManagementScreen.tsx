@@ -49,6 +49,7 @@ export const OrderManagementScreen: React.FC = () => {
     cancelOrder,
     deleteOrder,
     loadOrderForEditing,
+    cancelEditingOrder,
     showToast 
   } = useApp();
 
@@ -437,7 +438,11 @@ export const OrderManagementScreen: React.FC = () => {
         {/* Right Action: Create New Order Button */}
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setActiveView('DROP')}
+            onClick={() => {
+              cancelEditingOrder();
+              setActiveOrderId('');
+              setActiveView('DROP');
+            }}
             className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition"
           >
             <Plus className="w-4 h-4" />
@@ -629,7 +634,7 @@ export const OrderManagementScreen: React.FC = () => {
                         <div className="text-slate-600 text-[11px]">Paid: ₹{Number(order.advancePaid || 0).toFixed(2)}</div>
                         {order.balanceDue > 0 ? (
                           <div className="text-rose-700 font-black text-xs flex items-center gap-0.5">
-                            <span>Due: ₹{Number(order.balanceDue).toFixed(2)}</span>
+                            <span>Due: ₹{(Number(order.balanceDue) || 0).toFixed(2)}</span>
                           </div>
                         ) : (
                           <div className="text-emerald-700 font-bold text-[10px] flex items-center gap-1">
@@ -651,7 +656,7 @@ export const OrderManagementScreen: React.FC = () => {
                             : 'bg-amber-100 text-amber-800 border-amber-300'
                         }`}>
                           {isCancelled ? <Ban className="w-2.5 h-2.5" /> : <Clock className="w-2.5 h-2.5" />}
-                          <span>{order.status.replace('_', ' ')}</span>
+                          <span>{(order.status || 'RECEIVED').replace(/_/g, ' ')}</span>
                         </span>
                       </td>
 
@@ -1198,9 +1203,9 @@ export const OrderManagementScreen: React.FC = () => {
                         onChange={(e) => {
                           const type = e.target.value;
                           setEditSurchargeType(type);
-                          if (type === 'EXPRESS_NEXT_DAY') {
+                          if (type === 'EXPRESS_NEXT_DAY' || type === 'NEXT_DAY') {
                             setEditSurchargeAmount(Number((recalculatedTotals.gross * 0.25).toFixed(2)));
-                          } else if (type === 'SAME_DAY_URGENT') {
+                          } else if (type === 'SAME_DAY_URGENT' || type === 'SAME_DAY') {
                             setEditSurchargeAmount(Number((recalculatedTotals.gross * 0.50).toFixed(2)));
                           } else if (type === 'NONE') {
                             setEditSurchargeAmount(0);
@@ -1209,8 +1214,8 @@ export const OrderManagementScreen: React.FC = () => {
                         className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-xs"
                       >
                         <option value="NONE">None (Standard)</option>
-                        <option value="EXPRESS_NEXT_DAY">Express Next Day (+25%)</option>
-                        <option value="SAME_DAY_URGENT">Same Day Urgent (+50%)</option>
+                        <option value="NEXT_DAY">Next Day (+25%)</option>
+                        <option value="SAME_DAY">Same Day (+50%)</option>
                         <option value="CUSTOM">Custom Surcharge</option>
                       </select>
                       {editSurchargeAmount > 0 && (

@@ -393,7 +393,7 @@ export const printHandoverDeliverySlip = (
           ${businessSettings.businessName}
         </div>
         <div style="font-size: 11px; font-weight: bold; text-decoration: underline;">
-          CUSTOMER PICKUP & DELIVERY SLIP
+          CUSTOMER DELIVERY & HANDOVER SLIP
         </div>
         <div style="font-size: 9px; color: #444;">${businessSettings.branchName} • Phone: ${businessSettings.phone}</div>
       </div>

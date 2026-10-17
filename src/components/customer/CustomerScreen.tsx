@@ -38,11 +38,12 @@ export const CustomerScreen: React.FC = () => {
     setWhatsAppSimulatorOpen, 
     showToast,
     businessSettings,
-    resendPaymentLink
+    resendPaymentLink,
+    cancelEditingOrder
   } = useApp();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string>(activeCustomerId || customers[0]?.id || '');
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>(activeCustomerId || '');
   const [isNewCustModalOpen, setIsNewCustModalOpen] = useState(false);
   const [isEditCustModalOpen, setIsEditCustModalOpen] = useState(false);
 
@@ -75,16 +76,25 @@ export const CustomerScreen: React.FC = () => {
   const [editCustGst, setEditCustGst] = useState('');
   const [editCustNotes, setEditCustNotes] = useState('');
 
-  const filteredCustomers = customers.filter(c => 
-    c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    c.mobile.includes(searchQuery) ||
-    c.custCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    c.address.toLowerCase().includes(searchQuery.toLowerCase())
+  // Newly added customers first
+  const sortedCustomers = useMemo(() => {
+    return [...customers].sort((a, b) => {
+      const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return timeB - timeA;
+    });
+  }, [customers]);
+
+  const filteredCustomers = sortedCustomers.filter(c => 
+    (c.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (c.mobile || '').includes(searchQuery) ||
+    (c.custCode || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (c.address || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const selectedCustomer = (selectedCustomerId ? customers.find(c => c.id === selectedCustomerId) : undefined)
     || (activeCustomerId ? customers.find(c => c.id === activeCustomerId) : undefined)
-    || (customers.length > 0 ? customers[0] : null);
+    || (filteredCustomers.length > 0 ? filteredCustomers[0] : null);
 
   // Pre-index orders strictly by customerId for fast, accurate linking
   const ordersByCustomerId = useMemo(() => {
@@ -206,7 +216,7 @@ export const CustomerScreen: React.FC = () => {
       default:
         return (
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
-            <span>{status.replace(/_/g, ' ')}</span>
+            <span>{(status || 'RECEIVED').replace(/_/g, ' ')}</span>
           </span>
         );
     }
@@ -329,6 +339,7 @@ export const CustomerScreen: React.FC = () => {
   };
 
   const handleStartBookingForCustomer = (cust: Customer) => {
+    cancelEditingOrder();
     setSelectedCustomerId(cust.id);
     setActiveCustomerId(cust.id);
     setActiveView('DROP');
@@ -659,10 +670,10 @@ export const CustomerScreen: React.FC = () => {
                             {order.orderDate}
                           </td>
                           <td className="p-2.5 text-slate-800 font-medium">
-                            {order.totalPieces} Pcs ({order.items.map(i => i.garmentName).slice(0, 2).join(', ')}{order.items.length > 2 ? '...' : ''})
+                            {order.totalPieces || (Array.isArray(order.items) ? order.items.length : 0)} Pcs ({Array.isArray(order.items) ? order.items.map(i => i.garmentName).slice(0, 2).join(', ') : ''}{Array.isArray(order.items) && order.items.length > 2 ? '...' : ''})
                           </td>
                           <td className="p-2.5 font-bold text-slate-900 font-mono">
-                            ₹{order.netAmount.toFixed(2)}
+                            ₹{(Number(order.netAmount) || 0).toFixed(2)}
                           </td>
                           <td className="p-2.5">
                             {getPaymentStatusBadge(order)}
@@ -671,8 +682,8 @@ export const CustomerScreen: React.FC = () => {
                             {getDeliveryStatusBadge(order.status)}
                           </td>
                           <td className="p-2.5 font-bold">
-                            {order.balanceDue > 0 ? (
-                              <span className="text-rose-600 font-mono">₹{order.balanceDue.toFixed(2)}</span>
+                            {(Number(order.balanceDue) || 0) > 0 ? (
+                              <span className="text-rose-600 font-mono">₹{(Number(order.balanceDue) || 0).toFixed(2)}</span>
                             ) : (
                               <span className="text-emerald-700 font-mono">₹0.00</span>
                             )}

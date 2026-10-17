@@ -37,7 +37,7 @@ export const ProcessScreen: React.FC = () => {
 
   // Collect all garment items across all active orders
   const allWorkshopItems = orders.flatMap(order => 
-    order.items.map(item => ({
+    (order.items || []).map(item => ({
       ...item,
       orderId: order.id,
       orderNumber: order.orderNumber,
@@ -77,7 +77,7 @@ export const ProcessScreen: React.FC = () => {
     else if (currentStatus === 'READY') nextStatus = 'DELIVERED';
 
     updateGarmentStatus(orderId, barcode, nextStatus);
-    showToast(`Garment ${barcode} advanced to ${nextStatus.replace(/_/g, ' ')}!`, 'success');
+    showToast(`Garment ${barcode} advanced to ${(nextStatus || 'UPDATED').replace(/_/g, ' ')}!`, 'success');
   };
 
   // Toggle Selection
@@ -103,7 +103,7 @@ export const ProcessScreen: React.FC = () => {
       }
     });
 
-    showToast(`Updated ${selectedBarcodes.length} garments to ${targetStatus.replace(/_/g, ' ')}!`, 'success');
+    showToast(`Updated ${selectedBarcodes.length} garments to ${(targetStatus || 'UPDATED').replace(/_/g, ' ')}!`, 'success');
     setSelectedBarcodes([]);
   };
 
@@ -303,7 +303,7 @@ export const ProcessScreen: React.FC = () => {
 
                       <td className="p-3">
                         <span className="font-semibold text-slate-800">{item.serviceName} ({item.serviceCode})</span>
-                        {item.subServices.length > 0 && (
+                        {item.subServices && item.subServices.length > 0 && (
                           <div className="text-[10px] text-purple-700 font-medium">
                             +{item.subServices.map(s => s.name).join(', ')}
                           </div>
@@ -316,16 +316,11 @@ export const ProcessScreen: React.FC = () => {
                             value={currentPressing}
                             onChange={(e) => updateGarmentPressingMethod(item.orderId, item.barcode, e.target.value as PressingMethod)}
                             className={`text-[11px] font-bold px-2 py-1 rounded border outline-none cursor-pointer transition ${
-                              currentPressing === 'Steam Press'
-                                ? 'bg-amber-50 text-amber-900 border-amber-300 font-bold'
-                                : currentPressing === 'Iron Press'
-                                  ? 'bg-blue-50 text-blue-900 border-blue-300 font-bold'
-                                  : 'bg-indigo-50 text-indigo-900 border-indigo-300 font-bold'
+                              currentPressing === 'Iron Press'
+                                ? 'bg-blue-50 text-blue-900 border-blue-300 font-bold'
+                                : 'bg-indigo-50 text-indigo-900 border-indigo-300 font-bold'
                             }`}
                           >
-                            {currentPressing === 'Steam Press' && (
-                              <option value="Steam Press" disabled>Steam Press (Archived)</option>
-                            )}
                             {PRESSING_METHOD_OPTIONS.map(opt => (
                               <option key={opt} value={opt}>
                                 {opt}
@@ -336,7 +331,7 @@ export const ProcessScreen: React.FC = () => {
                       </td>
 
                       <td className="p-3">
-                        {item.remarks.length > 0 ? (
+                        {item.remarks && item.remarks.length > 0 ? (
                           <div className="flex flex-wrap gap-1">
                             {item.remarks.map((r, i) => (
                               <span key={i} className="bg-amber-100 text-amber-900 text-[10px] font-bold px-1.5 py-0.2 rounded border border-amber-300">
@@ -361,7 +356,7 @@ export const ProcessScreen: React.FC = () => {
                           item.status === 'PROCESSING' ? 'bg-blue-100 text-blue-800' :
                           'bg-slate-100 text-slate-800'
                         }`}>
-                          {item.status.replace(/_/g, ' ')}
+                          {(item.status || 'PROCESSING').replace(/_/g, ' ')}
                         </span>
                       </td>
 

@@ -197,7 +197,8 @@ export const PublicInvoicePortalPage: React.FC<PublicInvoicePortalPageProps> = (
 
   // Copy UPI Link to clipboard
   const handleCopyUpiLink = () => {
-    const link = upiPayUri || `upi://pay?pa=${effectiveUpiId}&pn=${encodeURIComponent(effectivePayeeName)}&am=${currentOrder?.balanceDue.toFixed(2)}&cu=INR&tn=${encodeURIComponent(`Trendera Order ${currentOrder?.orderNumber}`)}`;
+    const dueAmt = ((currentOrder?.balanceDue ?? effectiveBalanceDue) || 0).toFixed(2);
+    const link = upiPayUri || `upi://pay?pa=${effectiveUpiId}&pn=${encodeURIComponent(effectivePayeeName)}&am=${dueAmt}&cu=INR&tn=${encodeURIComponent(`Trendera Order ${currentOrder?.orderNumber}`)}`;
     try {
       navigator.clipboard.writeText(link);
       setCopiedUpiLink(true);
