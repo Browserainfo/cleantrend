@@ -67,10 +67,16 @@ export function buildPublicReceiptUrl(order: Order, businessSettings: BusinessSe
  * Formats a due date into the clean Indian standard format: 'DD MMM YYYY' (e.g. '26 Aug 2026')
  */
 export function formatWhatsAppDueDate(dateStr?: string): string {
-  if (!dateStr || !dateStr.trim()) return '26 Aug 2026';
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  if (!dateStr || !dateStr.trim()) {
+    const d = new Date();
+    d.setDate(d.getDate() + 4);
+    if (d.getDay() === 4) d.setDate(d.getDate() + 1);
+    return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+  }
   
   const trimmed = dateStr.trim();
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
   // 1. Direct match for "YYYY-MM-DD" or "YYYY/MM/DD" (prevents UTC timezone shift bug e.g. 2026-10-19 -> 18 Oct)
   const ymdMatch = trimmed.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);

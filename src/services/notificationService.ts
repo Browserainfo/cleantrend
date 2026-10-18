@@ -114,12 +114,20 @@ export function buildOrderWhatsAppMessage(
     ? `Hi ${custName}, Your order #${orderNumber} is registered.`
     : `Hi, Your order #${orderNumber} is registered.`;
 
+  // Calculate actual weight for weight-based orders
+  const actualWeight = Number(order.totalWeightKg || 0) > 0
+    ? Number(order.totalWeightKg)
+    : (order.items ? order.items.reduce((sum, i) => sum + (Number(i.weightKg) || 0), 0) : 0);
+  const isWeightBased = order.orderType === 'PER_WEIGHT' || actualWeight > 0;
+  const weightText = actualWeight > 0 ? `${actualWeight} kg` : '';
+
   const lines = [
     storeName,
     '',
     greeting,
     `Amt: Rs. ${totalAmount}`,
     `Qty: ${garmentsCount} Pcs`,
+    ...(isWeightBased && weightText ? [`Weight: ${weightText}`] : []),
     `Due Date: ${formattedDueDate}`,
     `Receipt: ${receiptUrl}`,
     '',
@@ -156,6 +164,12 @@ export function buildPaymentLinkWhatsAppMessage(
     ? `Hi ${custName}, here is your payment link for Order #${orderNumber}.`
     : `Hi, here is your payment link for Order #${orderNumber}.`;
 
+  const actualWeight = Number(order.totalWeightKg || 0) > 0
+    ? Number(order.totalWeightKg)
+    : (order.items ? order.items.reduce((sum, i) => sum + (Number(i.weightKg) || 0), 0) : 0);
+  const isWeightBased = order.orderType === 'PER_WEIGHT' || actualWeight > 0;
+  const weightText = actualWeight > 0 ? `${actualWeight} kg` : '';
+
   const lines = [
     storeName,
     '',
@@ -163,6 +177,7 @@ export function buildPaymentLinkWhatsAppMessage(
     `Amt: Rs. ${totalAmount}`,
     balanceDue > 0 ? `Balance Due: Rs. ${balanceDue}` : `Payment: Fully Paid`,
     `Qty: ${garmentsCount} Pcs`,
+    ...(isWeightBased && weightText ? [`Weight: ${weightText}`] : []),
     `Due Date: ${formattedDueDate}`,
     `Pay Online / View Receipt: ${receiptUrl}`,
     '',

@@ -171,14 +171,14 @@ export const isSameDayOrder = (
 /**
  * Calculates Tag Delivery Date:
  * - When SAME DAY is selected: shows the actual selected delivery date WITHOUT subtracting any days.
- * - For normal orders: keeps the standard one-day-earlier rule (Tag Date = Due Date - 1 day).
+ * - For normal orders: tag date shows 1 day before due date (Tag Date = Due Date - 1 day).
  * Handles timezone-safe parsing to avoid any 1-day offset bugs from UTC conversion.
  */
 export const calculateTagDeliveryDate = (crmDueDateStr?: string, isSameDay: boolean = false): string => {
   if (!crmDueDateStr || crmDueDateStr.trim() === '') {
     const today = new Date();
     if (!isSameDay) {
-      today.setDate(today.getDate() + 2); // Default fallback: +2 days from now
+      today.setDate(today.getDate() + 3); // 1 day before standard +4
     }
     return formatDateDDMMMYYYY(today);
   }
@@ -225,7 +225,7 @@ export const calculateTagDeliveryDate = (crmDueDateStr?: string, isSameDay: bool
   if (!dateObj || isNaN(dateObj.getTime())) {
     const today = new Date();
     if (!isSameDay) {
-      today.setDate(today.getDate() + 2);
+      today.setDate(today.getDate() + 3);
     }
     return formatDateDDMMMYYYY(today);
   }
@@ -235,7 +235,7 @@ export const calculateTagDeliveryDate = (crmDueDateStr?: string, isSameDay: bool
     return formatDateDDMMMYYYY(dateObj);
   }
 
-  // NORMAL ORDERS RULE: Subtract exactly 1 day (24 hours) from the CRM Delivery Date
+  // NORMAL ORDERS RULE: Subtract exactly 1 day (one day before due date) on garment piece tags
   dateObj.setDate(dateObj.getDate() - 1);
   return formatDateDDMMMYYYY(dateObj);
 };

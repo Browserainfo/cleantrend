@@ -1111,15 +1111,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       case 'PICKUP_SCHEDULED':
         msgText = `Dear ${order.customerName},\nYour pick up request with ${businessSettings.businessName} for Date: ${order.pickupDate || 'Today'} and Time: ${order.pickupTimeSlot || '4:30 PM – 6:00 PM'} has been placed successfully.\n${effectiveReceiptUrl}`;
         break;
-      case 'ORDER_READY':
-        msgText = `Dear ${order.customerName},\nYour order #${order.orderNumber} (${order.totalPieces} garments) is now CLEAN & READY for delivery or pickup at ${businessSettings.branchName}.\nBalance Due: ₹${order.balanceDue.toLocaleString('en-IN')}\nReceipt & Pay Online:\n${effectiveReceiptUrl}\nThank you!`;
+      case 'ORDER_READY': {
+        const actualWeight = Number(order.totalWeightKg || 0) > 0
+          ? Number(order.totalWeightKg)
+          : (order.items ? order.items.reduce((sum, i) => sum + (Number(i.weightKg) || 0), 0) : 0);
+        const weightNote = actualWeight > 0 ? ` • ${actualWeight} kg` : '';
+        msgText = `Dear ${order.customerName},\nYour order #${order.orderNumber} (${order.totalPieces} garments${weightNote}) is now CLEAN & READY for delivery or pickup at ${businessSettings.branchName}.\nBalance Due: ₹${order.balanceDue.toLocaleString('en-IN')}\nReceipt & Pay Online:\n${effectiveReceiptUrl}\nThank you!`;
         break;
+      }
       case 'PAYMENT_RECEIVED':
         msgText = `Dear ${order.customerName},\nPayment of ₹${order.netAmount - order.balanceDue > 0 ? (order.netAmount - order.balanceDue).toLocaleString('en-IN') : order.netAmount.toLocaleString('en-IN')} for your Order #${order.orderNumber} has been received with Thanks!\nCurrent Balance Due: ₹${order.balanceDue.toLocaleString('en-IN')}\nReceipt:\n${effectiveReceiptUrl}`;
         break;
-      case 'ORDER_DELIVERED_FEEDBACK':
-        msgText = `Order Feedback: Hi ${order.customerName}, We have successfully delivered your Order #${order.orderNumber} (Qty: ${order.totalPieces} Pcs).\nHow was our service? Please share your valuable rating.\nThank you for choosing ${businessSettings.businessName}!`;
+      case 'ORDER_DELIVERED_FEEDBACK': {
+        const actualWeight = Number(order.totalWeightKg || 0) > 0
+          ? Number(order.totalWeightKg)
+          : (order.items ? order.items.reduce((sum, i) => sum + (Number(i.weightKg) || 0), 0) : 0);
+        const weightNote = actualWeight > 0 ? ` • ${actualWeight} kg` : '';
+        msgText = `Order Feedback: Hi ${order.customerName}, We have successfully delivered your Order #${order.orderNumber} (Qty: ${order.totalPieces} Pcs${weightNote}).\nHow was our service? Please share your valuable rating.\nThank you for choosing ${businessSettings.businessName}!`;
         break;
+      }
       case 'ORDER_UPDATED':
         msgText = `Hi ${order.customerName},\nYour Order #${order.orderNumber} has been inspected and updated by our store manager.\nNew Amount: ₹${order.netAmount.toLocaleString('en-IN')}\nReceipt:\n${effectiveReceiptUrl}\nThanks!`;
         break;

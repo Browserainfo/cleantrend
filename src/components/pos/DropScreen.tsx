@@ -308,15 +308,18 @@ export const DropScreen: React.FC = () => {
     return () => window.removeEventListener('trendera_topup_rates_updated', handleRatesUpdate);
   }, []);
   
-  // Ready target date initialized to defaultDueDays, skipping Thursday if needed
-  const [selectedDueDate, setSelectedDueDate] = useState<Date>(() => {
+  // Helper to compute standard target due date based on defaultDueDays, skipping Thursday weekly holiday
+  const getDefaultDueDate = () => {
     const d = new Date();
-    d.setDate(d.getDate() + (businessSettings.defaultDueDays || 4));
+    d.setDate(d.getDate() + (businessSettings?.defaultDueDays || 4));
     if (d.getDay() === 4) { // Thursday is weekly holiday
       d.setDate(d.getDate() + 1);
     }
     return d;
-  });
+  };
+
+  // Ready target date initialized to defaultDueDays, skipping Thursday if needed
+  const [selectedDueDate, setSelectedDueDate] = useState<Date>(getDefaultDueDate);
 
   // Keyboard Shortcuts
   useEffect(() => {
@@ -355,6 +358,8 @@ export const DropScreen: React.FC = () => {
         if (items.length > 0) {
           if (window.confirm('Cancel and clear current order draft?')) {
             setItems([]);
+            setSurchargeType('NONE');
+            setSelectedDueDate(getDefaultDueDate());
             showToast('Order draft cancelled and cleared.', 'info');
           }
         }
@@ -865,12 +870,12 @@ export const DropScreen: React.FC = () => {
           const d = String(selectedDueDate.getDate()).padStart(2, '0');
           formattedDueDate = `${y}-${m}-${d}`;
         } else {
-          const now = new Date();
-          formattedDueDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+          const defDate = getDefaultDueDate();
+          formattedDueDate = `${defDate.getFullYear()}-${String(defDate.getMonth() + 1).padStart(2, '0')}-${String(defDate.getDate()).padStart(2, '0')}`;
         }
       } catch {
-        const now = new Date();
-        formattedDueDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        const defDate = getDefaultDueDate();
+        formattedDueDate = `${defDate.getFullYear()}-${String(defDate.getMonth() + 1).padStart(2, '0')}-${String(defDate.getDate()).padStart(2, '0')}`;
       }
 
       const effectiveDiffAction = (advancePaid > 0 && advanceDiff > 0 && advanceDiffOption) ? advanceDiffOption : undefined;
@@ -925,6 +930,7 @@ export const DropScreen: React.FC = () => {
         setWorkshopNotes('');
         setDeliveryNotes('');
         setSurchargeType('NONE');
+        setSelectedDueDate(getDefaultDueDate());
         setIsSameDayPriceManuallyEdited(false);
         setIsNextDayPriceManuallyEdited(false);
         setHasDeliveryCharge(false);
@@ -1053,6 +1059,7 @@ export const DropScreen: React.FC = () => {
     setWorkshopNotes('');
     setDeliveryNotes('');
     setSurchargeType('NONE');
+    setSelectedDueDate(getDefaultDueDate());
     setIsSameDayPriceManuallyEdited(false);
     setIsNextDayPriceManuallyEdited(false);
     setHasDeliveryCharge(false);
@@ -2005,6 +2012,8 @@ export const DropScreen: React.FC = () => {
                 onClick={() => {
                   if (window.confirm('Clear all items from current order draft?')) {
                     setItems([]);
+                    setSurchargeType('NONE');
+                    setSelectedDueDate(getDefaultDueDate());
                     showToast('All items cleared from cart.', 'info');
                   }
                 }}
@@ -2520,7 +2529,10 @@ export const DropScreen: React.FC = () => {
                   <div
                     role="button"
                     tabIndex={0}
-                    onClick={() => setSurchargeType('NONE')}
+                    onClick={() => {
+                      setSurchargeType('NONE');
+                      setSelectedDueDate(getDefaultDueDate());
+                    }}
                     className={`p-2 rounded-lg border text-left transition flex flex-col justify-between cursor-pointer ${
                       surchargeType === 'NONE'
                         ? 'bg-slate-800 text-white border-slate-800 shadow-2xs font-semibold'
@@ -2539,6 +2551,7 @@ export const DropScreen: React.FC = () => {
                     onClick={() => {
                       if (surchargeType === 'NEXT_DAY') {
                         setSurchargeType('NONE');
+                        setSelectedDueDate(getDefaultDueDate());
                       } else {
                         setSurchargeType('NEXT_DAY');
                         const nextDate = new Date();
@@ -2624,6 +2637,7 @@ export const DropScreen: React.FC = () => {
                     onClick={() => {
                       if (surchargeType === 'SAME_DAY') {
                         setSurchargeType('NONE');
+                        setSelectedDueDate(getDefaultDueDate());
                       } else {
                         setSurchargeType('SAME_DAY');
                         const now = new Date();
@@ -3189,6 +3203,8 @@ export const DropScreen: React.FC = () => {
                   onClick={() => {
                     if (items.length === 0 || window.confirm('Cancel and clear current order draft?')) {
                       setItems([]);
+                      setSurchargeType('NONE');
+                      setSelectedDueDate(getDefaultDueDate());
                       setPickAndDropType(null);
                       setActiveView('HOME');
                     }
@@ -3280,12 +3296,12 @@ export const DropScreen: React.FC = () => {
                       const d = String(selectedDueDate.getDate()).padStart(2, '0');
                       formattedDueDate = `${y}-${m}-${d}`;
                     } else {
-                      const now = new Date();
-                      formattedDueDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                      const defDate = getDefaultDueDate();
+                      formattedDueDate = `${defDate.getFullYear()}-${String(defDate.getMonth() + 1).padStart(2, '0')}-${String(defDate.getDate()).padStart(2, '0')}`;
                     }
                   } catch {
-                    const now = new Date();
-                    formattedDueDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                    const defDate = getDefaultDueDate();
+                    formattedDueDate = `${defDate.getFullYear()}-${String(defDate.getMonth() + 1).padStart(2, '0')}-${String(defDate.getDate()).padStart(2, '0')}`;
                   }
 
                   const nextNum = editingOrder?.orderNumber || (Math.max(...orders.map(o => o.orderNumber), 0) + 1);
