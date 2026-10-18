@@ -2959,13 +2959,7 @@ async function startServer() {
       server: {
         middlewareMode: true,
         hmr: false,
-        allowedHosts: [
-          'crm.trenderacleaners.com',
-          '.trenderacleaners.com',
-          'trenderacleaners.com',
-          '.trycloudflare.com',
-          '*.trycloudflare.com',
-        ],
+        allowedHosts: true,
       },
       appType: 'spa',
     });

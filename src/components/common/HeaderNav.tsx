@@ -82,11 +82,11 @@ export const HeaderNav: React.FC = () => {
   return (
     <header className="bg-slate-900 text-slate-100 shadow-md border-b border-slate-800 select-none sticky top-0 z-40">
       {/* Top Banner / Role Status & Anti-Fraud Bar */}
-      <div className="bg-slate-950 px-4 py-1.5 text-xs flex flex-wrap items-center justify-between border-b border-slate-800 gap-2">
-        <div className="flex items-center gap-3">
+      <div className="bg-slate-950 px-4 py-1.5 text-xs flex items-center justify-between border-b border-slate-800 gap-3">
+        <div className="flex items-center gap-3 min-w-0 shrink">
           <div 
             onClick={() => handleMenuClick('HOME')} 
-            className="flex items-center gap-2.5 cursor-pointer hover:opacity-90 transition"
+            className="flex items-center gap-2.5 cursor-pointer hover:opacity-90 transition shrink-0"
             title={`${businessSettings.businessName || 'Store'} Front Counter Desk (Home)`}
           >
             {/* Live Status Indicator (Leading) */}
@@ -103,14 +103,14 @@ export const HeaderNav: React.FC = () => {
               />
             )}
 
-            <span className="font-bold text-white tracking-wide">{businessSettings.businessName || businessSettings.displayName || businessSettings.storeName}</span>
-            <span className="text-slate-400 text-[11px] hidden md:inline">| {businessSettings.address}</span>
+            <span className="font-bold text-white tracking-wide shrink-0">{businessSettings.businessName || businessSettings.displayName || businessSettings.storeName}</span>
+            <span className="text-slate-400 text-[11px] hidden lg:inline truncate max-w-[260px] xl:max-w-[420px]" title={businessSettings.address}>| {businessSettings.address}</span>
           </div>
 
-          <div className="h-3.5 w-px bg-slate-800 hidden sm:block"></div>
+          <div className="h-3.5 w-px bg-slate-800 hidden sm:block shrink-0"></div>
 
           {/* Quick Active Role Indicator & Switcher */}
-          <div className="flex items-center gap-1.5 bg-slate-900 rounded p-0.5 border border-slate-800">
+          <div className="flex items-center gap-1.5 bg-slate-900 rounded p-0.5 border border-slate-800 shrink-0">
             <span className="text-[10px] text-slate-400 px-1.5 font-medium">Role:</span>
             
             <button
@@ -145,8 +145,8 @@ export const HeaderNav: React.FC = () => {
           </div>
         </div>
 
-        {/* Quick Launchers / Simulators */}
-        <div className="flex items-center gap-2">
+        {/* Quick Launchers / Simulators (Aligned to the Right) */}
+        <div className="flex items-center gap-2 ml-auto shrink-0 justify-end">
           {/* WhatsApp & Email Notification Simulator Button */}
           <button
             id="launch-whatsapp-btn"
