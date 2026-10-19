@@ -407,6 +407,9 @@ export const renderPieceTagHtml = (tag: PieceTagData): string => {
       width: 38mm;
       max-width: 38mm;
       min-width: 38mm;
+      height: 28mm;
+      max-height: 28mm;
+      min-height: 28mm;
       box-sizing: border-box;
       padding: 0.6mm 1mm 0.5mm 1mm;
       border: 0.6px solid #000;
@@ -421,6 +424,8 @@ export const renderPieceTagHtml = (tag: PieceTagData): string => {
       break-inside: avoid;
       margin: 0 auto;
       overflow: hidden;
+      transform: none;
+      -webkit-transform: none;
     ">
       <!-- Top Row: Business Name & Order Code -->
       <div style="
@@ -620,45 +625,62 @@ export const printPiece2RTags = (
 
   const styles = `
     @page {
-      size: 38mm 28mm;
-      size: 38mm 28mm portrait;
-      orientation: portrait;
+      size: portrait;
+      page-orientation: upright;
       margin: 0 !important;
       padding: 0 !important;
     }
     @media print {
       @page {
-        size: 38mm 28mm;
-        size: 38mm 28mm portrait;
-        orientation: portrait;
+        size: portrait;
+        page-orientation: upright;
         margin: 0 !important;
         padding: 0 !important;
       }
       @page :first {
-        size: 38mm 28mm;
-        size: 38mm 28mm portrait;
-        orientation: portrait;
+        size: portrait;
+        page-orientation: upright;
+        margin: 0 !important;
+      }
+      @page :left {
+        size: portrait;
+        page-orientation: upright;
+        margin: 0 !important;
+      }
+      @page :right {
+        size: portrait;
+        page-orientation: upright;
         margin: 0 !important;
       }
       *, *::before, *::after {
         box-sizing: border-box !important;
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
+        color-adjust: exact !important;
+        transform: none !important;
+        -webkit-transform: none !important;
       }
       html, body {
         width: 38mm !important;
-        height: 28mm !important;
+        max-width: 38mm !important;
+        min-width: 38mm !important;
         margin: 0 !important;
         padding: 0 !important;
         background: #ffffff !important;
         color: #000000 !important;
-        overflow: hidden !important;
+        overflow: visible !important;
         -webkit-text-size-adjust: 100% !important;
+        transform: none !important;
+        -webkit-transform: none !important;
+        writing-mode: horizontal-tb !important;
       }
       .print-tag-wrapper {
         width: 38mm !important;
+        max-width: 38mm !important;
+        min-width: 38mm !important;
         height: 28mm !important;
         max-height: 28mm !important;
+        min-height: 28mm !important;
         margin: 0 auto !important;
         padding: 0 !important;
         page-break-inside: avoid !important;
@@ -668,6 +690,8 @@ export const printPiece2RTags = (
         display: block !important;
         box-sizing: border-box !important;
         overflow: hidden !important;
+        transform: none !important;
+        -webkit-transform: none !important;
       }
       .print-tag-wrapper:last-child {
         page-break-after: avoid !important;
@@ -679,10 +703,13 @@ export const printPiece2RTags = (
         min-width: 38mm !important;
         height: 28mm !important;
         max-height: 28mm !important;
+        min-height: 28mm !important;
         margin: 0 auto !important;
         padding: 0.6mm 1mm 0.5mm 1mm !important;
         overflow: hidden !important;
         box-sizing: border-box !important;
+        transform: none !important;
+        -webkit-transform: none !important;
       }
     }
   `;
