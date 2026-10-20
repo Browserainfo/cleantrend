@@ -1,5 +1,6 @@
 import { Order, OrderGarmentItem, BusinessSettings } from '../types';
 import { printPiece2RTags, generatePieceTagsForOrder } from './pieceTagUtils';
+import { isCurtainGarment } from './curtainUtils';
 
 export interface PrintDocumentOptions {
   title?: string;
@@ -241,13 +242,24 @@ export const printThermalBookingReceipt = (
             </tr>
           </thead>
           <tbody>
-            ${order.items.map((item, idx) => `
+            ${order.items.map((item, idx) => {
+              const isCurtain = item.isCurtain || isCurtainGarment(item.garmentName, item.garmentCode);
+              const pcs = item.quantity || 1;
+              const panels = item.panelCount !== undefined ? item.panelCount : pcs;
+              const rate = item.pricePerPanel || item.basePrice || 50;
+
+              return `
               <tr>
                 <td style="padding: 3px 0;">
                   <strong>${idx + 1}. ${item.garmentName}</strong>
                   <div style="font-size: 9px; color: #444; padding-left: 8px;">
                     ${item.serviceName} • Barcode: ${item.barcode}
                   </div>
+                  ${isCurtain ? `
+                    <div style="font-size: 9px; color: #1e1b4b; font-weight: bold; padding-left: 8px;">
+                      Piece: ${pcs} • Panel: ${panels} (@ Rs. ${rate}/panel)
+                    </div>
+                  ` : ''}
                   ${item.brand ? `<div style="font-size: 9px; color: #222; padding-left: 8px;">Brand: ${item.brand}</div>` : ''}
                   ${item.remarks?.length ? `<div style="font-size: 9px; color: #555; font-style: italic; padding-left: 8px;">Remarks: ${item.remarks.join(', ')}</div>` : ''}
                 </td>
@@ -255,7 +267,8 @@ export const printThermalBookingReceipt = (
                   ${item.totalItemPrice.toFixed(2)}
                 </td>
               </tr>
-            `).join('')}
+            `;
+            }).join('')}
           </tbody>
         </table>
       </div>
@@ -263,8 +276,8 @@ export const printThermalBookingReceipt = (
       <!-- Financial Calculation -->
       <div style="border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 8px; font-size: 10.5px;">
         <div style="display: flex; justify-content: space-between;">
-          <span>Total Pieces / Weight:</span>
-          <strong>${order.totalPieces} Pcs ${order.totalWeightKg ? `(${order.totalWeightKg} kg)` : ''}</strong>
+          <span>Total Pieces / Panels:</span>
+          <strong>${order.totalPieces} Pcs${order.totalPanels !== undefined && order.totalPanels > 0 ? ` • ${order.totalPanels} Panels` : ''} ${order.totalWeightKg ? `(${order.totalWeightKg} kg)` : ''}</strong>
         </div>
         <div style="display: flex; justify-content: space-between;">
           <span>Items Subtotal:</span>

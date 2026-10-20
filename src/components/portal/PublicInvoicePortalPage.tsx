@@ -26,6 +26,7 @@ import {
   Smartphone,
   Send
 } from 'lucide-react';
+import { isCurtainGarment } from '../../utils/curtainUtils';
 import { Order, PaymentTransaction, BusinessSettings } from '../../types';
 import { printThermalBookingReceipt } from '../../utils/printUtils';
 import { numberToIndianWords } from '../../utils/currencyUtils';
@@ -573,19 +574,42 @@ export const PublicInvoicePortalPage: React.FC<PublicInvoicePortalPageProps> = (
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {(currentOrder.items || []).map((item, idx) => {
-                    const unitPrice = Number((item as any).unitPrice ?? item.basePrice ?? (item.totalItemPrice ? (item.totalItemPrice / (item.quantity || 1)) : 0)) || 0;
-                    const totalPrice = Number(item.totalItemPrice ?? (unitPrice * (item.quantity || 1))) || 0;
+                    const isCurtain = item.isCurtain || isCurtainGarment(item.garmentName, item.garmentCode);
+                    const pcs = item.quantity || 1;
+                    const panels = item.panelCount !== undefined ? item.panelCount : pcs;
+                    const panelPrice = item.pricePerPanel || item.basePrice || 50;
+                    const unitPrice = isCurtain
+                      ? panelPrice
+                      : Number((item as any).unitPrice ?? item.basePrice ?? (item.totalItemPrice ? (item.totalItemPrice / pcs) : 0)) || 0;
+                    const totalPrice = Number(item.totalItemPrice ?? (isCurtain ? (panels * panelPrice) : (unitPrice * pcs))) || 0;
                     const serviceName = item.serviceName || (item as any).serviceType || (item.serviceCode === 'DC' ? 'Dry Cleaning' : item.serviceCode) || 'Dry Cleaning';
                     return (
                       <tr key={item.id || idx} className="hover:bg-slate-50">
                         <td className="py-2.5 px-3 text-slate-400 font-mono">{idx + 1}</td>
                         <td className="py-2.5 px-3 font-semibold text-slate-800">
-                          {item.garmentName}
+                          <div>{item.garmentName}</div>
+                          {isCurtain && (
+                            <div className="text-[11px] font-mono text-indigo-700 font-bold mt-0.5">
+                              Piece: {pcs} • Panel: {panels}
+                            </div>
+                          )}
                           {item.color && <span className="ml-2 text-[10px] font-normal text-slate-500">({item.color})</span>}
                         </td>
                         <td className="py-2.5 px-3 text-slate-600">{serviceName}</td>
-                        <td className="py-2.5 px-3 text-center font-bold text-slate-700">{item.quantity || 1}</td>
-                        <td className="py-2.5 px-3 text-right font-mono text-slate-600">₹{unitPrice.toFixed(2)}</td>
+                        <td className="py-2.5 px-3 text-center font-bold text-slate-700">
+                          {isCurtain ? (
+                            <div className="flex flex-col items-center">
+                              <span>{pcs} Pcs</span>
+                              <span className="text-[10px] text-indigo-700 font-mono font-bold">({panels} Panels)</span>
+                            </div>
+                          ) : (
+                            pcs
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono text-slate-600">
+                          ₹{unitPrice.toFixed(2)}
+                          {isCurtain && <span className="text-[10px] text-slate-400 block">/panel</span>}
+                        </td>
                         <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">₹{totalPrice.toFixed(2)}</td>
                       </tr>
                     );
@@ -609,6 +633,14 @@ export const PublicInvoicePortalPage: React.FC<PublicInvoicePortalPageProps> = (
 
             {/* Calculations Card */}
             <div className="w-full sm:w-72 bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs space-y-2">
+              <div className="flex justify-between text-slate-600">
+                <span>Total Pieces / Panels:</span>
+                <span className="font-semibold text-slate-800">
+                  {currentOrder.totalPieces || (currentOrder.items ? currentOrder.items.reduce((s, i) => s + (i.quantity || 1), 0) : 1)} Pcs
+                  {currentOrder.totalPanels !== undefined && currentOrder.totalPanels > 0 ? ` • ${currentOrder.totalPanels} Panels` : ''}
+                </span>
+              </div>
+
               <div className="flex justify-between text-slate-600">
                 <span>Items Gross:</span>
                 <span className="font-mono">₹{(currentOrder.grossAmount ?? 0).toFixed(2)}</span>

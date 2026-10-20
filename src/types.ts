@@ -92,6 +92,12 @@ export interface OrderGarmentItem {
   deliveredBy?: string;
   returnedOn?: string;
   returnReason?: string;
+  // Curtain Panel Counting
+  isCurtain?: boolean;
+  curtainType?: 'WINDOW' | 'DOOR' | 'CEILING' | 'OTHER' | string; // Window, Door, or Ceiling Curtain
+  panelsPerCurtain?: number; // Panels per curtain piece e.g. 5
+  panelCount?: number; // Total panels = quantity * panelsPerCurtain
+  pricePerPanel?: number; // Rate per panel e.g. ₹100
 }
 
 export type OrderStatus = 'DRAFT' | 'RECEIVED' | 'IN_PROCESS' | 'PENDING_FINISHING' | 'READY' | 'PARTIALLY_DELIVERED' | 'DELIVERED' | 'CANCELLED';
@@ -124,6 +130,7 @@ export interface Order {
   customerPlaceOfSupply: string;
   items: OrderGarmentItem[];
   totalPieces: number;
+  totalPanels?: number; // Total curtain panels across the order
   totalWeightKg?: number; // Total weight for weight-based orders
   deliveryCharge?: number; // Delivery charge amount (e.g. ₹50)
   hasDeliveryCharge?: boolean; // Whether delivery charge is applied

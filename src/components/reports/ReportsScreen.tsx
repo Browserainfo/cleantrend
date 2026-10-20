@@ -41,7 +41,7 @@ export const ReportsScreen: React.FC = () => {
       const qty = Number(item.quantity) || 1;
       const price = Number(item.totalItemPrice) || 0;
       garmentStatsMap[gName].count += qty;
-      garmentStatsMap[gName].revenue += price * qty;
+      garmentStatsMap[gName].revenue += price;
     });
   });
 

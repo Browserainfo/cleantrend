@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { normalizeIndianPhoneNumber } from '../../utils/phoneUtils';
 import { buildPublicReceiptUrl } from '../../utils/portalUrlUtils';
+import { isCurtainGarment } from '../../utils/curtainUtils';
 
 export const OrderManagementScreen: React.FC = () => {
   const { 
@@ -86,6 +87,7 @@ export const OrderManagementScreen: React.FC = () => {
   const [newItemService, setNewItemService] = useState('Dry Clean');
   const [newItemPressing, setNewItemPressing] = useState('Iron Press');
   const [newItemQty, setNewItemQty] = useState(1);
+  const [newItemPanels, setNewItemPanels] = useState<number>(1);
   const [newItemPrice, setNewItemPrice] = useState(0);
 
   // New Payment Transaction State
@@ -195,6 +197,7 @@ export const OrderManagementScreen: React.FC = () => {
     const advance = Number(editingOrder?.advancePaid || 0);
     const balance = Math.max(0, roundedNet - advance);
     const totalPcs = editItems.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0);
+    const totalPanels = editItems.reduce((sum, item) => sum + (item.isCurtain || isCurtainGarment(item.garmentName, item.garmentCode) ? (item.panelCount !== undefined ? item.panelCount : (item.quantity || 1)) : 0), 0);
 
     return {
       gross,
@@ -205,7 +208,8 @@ export const OrderManagementScreen: React.FC = () => {
       roundedNet,
       advance,
       balance,
-      totalPcs
+      totalPcs,
+      totalPanels
     };
   }, [editItems, editDiscountPercent, editDeliveryCharge, editSurchargeAmount, editingOrder?.advancePaid]);
 
@@ -216,8 +220,32 @@ export const OrderManagementScreen: React.FC = () => {
       const updated = [...prev];
       const item = { ...updated[index] };
       item.quantity = newQty;
-      const unitPrice = item.basePrice || (item.totalItemPrice / (item.quantity || 1));
-      item.totalItemPrice = Number((unitPrice * newQty).toFixed(2));
+      if (item.isCurtain || isCurtainGarment(item.garmentName, item.garmentCode)) {
+        item.isCurtain = true;
+        const panels = item.panelCount !== undefined ? item.panelCount : newQty;
+        const panelRate = item.pricePerPanel || item.basePrice || 50;
+        item.pricePerPanel = panelRate;
+        item.basePrice = panelRate;
+        item.totalItemPrice = Number((panels * panelRate).toFixed(2));
+      } else {
+        const unitPrice = item.basePrice || (item.totalItemPrice / (item.quantity || 1));
+        item.totalItemPrice = Number((unitPrice * newQty).toFixed(2));
+      }
+      updated[index] = item;
+      return updated;
+    });
+  };
+
+  // Handle Curtain Total Panels Change
+  const handleItemPanelsChange = (index: number, newTotalPanels: number) => {
+    if (newTotalPanels < 1) return;
+    setEditItems(prev => {
+      const updated = [...prev];
+      const item = { ...updated[index] };
+      item.isCurtain = true;
+      item.panelCount = newTotalPanels;
+      const panelRate = item.pricePerPanel || item.basePrice || 50;
+      item.totalItemPrice = Number((newTotalPanels * panelRate).toFixed(2));
       updated[index] = item;
       return updated;
     });
@@ -229,7 +257,14 @@ export const OrderManagementScreen: React.FC = () => {
       const updated = [...prev];
       const item = { ...updated[index] };
       item.basePrice = newUnitPrice;
-      item.totalItemPrice = Number((newUnitPrice * (item.quantity || 1)).toFixed(2));
+      if (item.isCurtain || isCurtainGarment(item.garmentName, item.garmentCode)) {
+        item.isCurtain = true;
+        item.pricePerPanel = newUnitPrice;
+        const panels = item.panelCount !== undefined ? item.panelCount : (item.quantity || 1);
+        item.totalItemPrice = Number((panels * newUnitPrice).toFixed(2));
+      } else {
+        item.totalItemPrice = Number((newUnitPrice * (item.quantity || 1)).toFixed(2));
+      }
       updated[index] = item;
       return updated;
     });
@@ -274,6 +309,12 @@ export const OrderManagementScreen: React.FC = () => {
     const nextSeq = editItems.length + 1;
     const barcode = `${editingOrder?.orderSeries || 'TE02-ORD'}-${nextSeq}`;
 
+    const isCurtain = isCurtainGarment(newItemGarmentName.trim());
+    const totalPanels = isCurtain ? Math.max(1, newItemPanels || newItemQty) : newItemQty;
+    const totalLinePrice = isCurtain 
+      ? Number((totalPanels * newItemPrice).toFixed(2))
+      : Number((newItemPrice * newItemQty).toFixed(2));
+
     const newItem: OrderGarmentItem = {
       id: `item-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
       garmentSequence: nextSeq,
@@ -284,9 +325,12 @@ export const OrderManagementScreen: React.FC = () => {
       pressingMethod: newItemPressing,
       quantity: newItemQty,
       basePrice: newItemPrice,
+      pricePerPanel: isCurtain ? newItemPrice : undefined,
+      panelCount: isCurtain ? totalPanels : undefined,
+      isCurtain: isCurtain ? true : undefined,
       subServices: [],
-      totalItemPrice: Number((newItemPrice * newItemQty).toFixed(2)),
-      remarks: [],
+      totalItemPrice: totalLinePrice,
+      remarks: isCurtain ? [`Piece: ${newItemQty} • Total Panels: ${totalPanels} (@ ₹${newItemPrice}/panel)`] : [],
       barcode,
       status: 'RECEIVED'
     };
@@ -296,7 +340,8 @@ export const OrderManagementScreen: React.FC = () => {
     setNewItemGarmentName('');
     setNewItemPrice(0);
     setNewItemQty(1);
-    showToast(`Added ${newItem.garmentName} to order.`, 'success');
+    setNewItemPanels(1);
+    showToast(`Added ${newItem.garmentName} (Piece: ${newItemQty}, Panel: ${totalPanels}) to order.`, 'success');
   };
 
   // Add Payment Transaction
@@ -375,6 +420,7 @@ export const OrderManagementScreen: React.FC = () => {
       deliveryNotes: editDeliveryNotes,
       items: editItems,
       totalPieces: recalculatedTotals.totalPcs,
+      totalPanels: recalculatedTotals.totalPanels,
       payments: editingOrder.payments || [],
       receiptUrl: buildPublicReceiptUrl({
         ...editingOrder,
@@ -609,8 +655,13 @@ export const OrderManagementScreen: React.FC = () => {
 
                       {/* Items / Pieces */}
                       <td className="py-3 px-3">
-                        <div className="font-bold text-slate-800">
-                          {order.totalPieces || (order.items?.reduce((s, i) => s + (i.quantity || 1), 0)) || 1} Pcs
+                        <div className="font-bold text-slate-800 flex items-center gap-1.5 flex-wrap">
+                          <span>{order.totalPieces || (order.items?.reduce((s, i) => s + (i.quantity || 1), 0)) || 1} Pcs</span>
+                          {order.totalPanels !== undefined && order.totalPanels > 0 && (
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 font-bold">
+                              {order.totalPanels} Panels
+                            </span>
+                          )}
                         </div>
                         <div className="text-[10px] text-slate-500 truncate max-w-[180px]" title={order.items?.map(i => `${i.quantity}x ${i.garmentName}`).join(', ')}>
                           {order.items?.map(i => `${i.quantity}x ${i.garmentName}`).join(', ') || 'Dry cleaning items'}
@@ -924,7 +975,7 @@ export const OrderManagementScreen: React.FC = () => {
                   <div className="flex items-center gap-2">
                     <ShoppingBag className="w-4 h-4 text-sky-600" />
                     <span className="font-bold text-slate-900 text-xs">
-                      Order Garments ({editItems.length} items • {recalculatedTotals.totalPcs} Pcs)
+                      Order Garments ({editItems.length} items • {recalculatedTotals.totalPcs} Pcs{recalculatedTotals.totalPanels > 0 ? ` • ${recalculatedTotals.totalPanels} Panels` : ''})
                     </span>
                   </div>
 
@@ -952,9 +1003,15 @@ export const OrderManagementScreen: React.FC = () => {
                         <label className="text-[10px] font-bold text-slate-600">Garment Item Name</label>
                         <input
                           type="text"
-                          placeholder="e.g. Kurta Pajama, Silk Saree, Blazer..."
+                          placeholder="e.g. Curtains, Silk Saree, Blazer..."
                           value={newItemGarmentName}
-                          onChange={(e) => setNewItemGarmentName(e.target.value)}
+                          onChange={(e) => {
+                            const name = e.target.value;
+                            setNewItemGarmentName(name);
+                            if (isCurtainGarment(name) && newItemPanels <= 1 && newItemQty > 1) {
+                              setNewItemPanels(newItemQty);
+                            }
+                          }}
                           className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded text-xs outline-none focus:ring-1 focus:ring-sky-500"
                         />
                       </div>
@@ -991,7 +1048,9 @@ export const OrderManagementScreen: React.FC = () => {
 
                       <div className="flex gap-2">
                         <div className="w-16">
-                          <label className="text-[10px] font-bold text-slate-600">Qty</label>
+                          <label className="text-[10px] font-bold text-slate-600">
+                            {isCurtainGarment(newItemGarmentName) ? 'Pieces' : 'Qty'}
+                          </label>
                           <input
                             type="text"
                             inputMode="numeric"
@@ -999,13 +1058,37 @@ export const OrderManagementScreen: React.FC = () => {
                             onFocus={(e) => e.target.select()}
                             onChange={(e) => {
                               const cleaned = e.target.value.replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '');
-                              setNewItemQty(cleaned === '' ? 1 : Math.max(1, parseInt(cleaned, 10) || 1));
+                              const q = cleaned === '' ? 1 : Math.max(1, parseInt(cleaned, 10) || 1);
+                              setNewItemQty(q);
+                              if (isCurtainGarment(newItemGarmentName) && (!newItemPanels || newItemPanels === newItemQty)) {
+                                setNewItemPanels(q);
+                              }
                             }}
                             className="w-full px-2 py-1.5 bg-white border border-slate-300 rounded text-xs font-bold text-center"
                           />
                         </div>
+
+                        {isCurtainGarment(newItemGarmentName) && (
+                          <div className="w-20">
+                            <label className="text-[10px] font-bold text-indigo-700">Total Panels</label>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={newItemPanels}
+                              onFocus={(e) => e.target.select()}
+                              onChange={(e) => {
+                                const cleaned = e.target.value.replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '');
+                                setNewItemPanels(cleaned === '' ? 1 : Math.max(1, parseInt(cleaned, 10) || 1));
+                              }}
+                              className="w-full px-2 py-1.5 bg-white border border-indigo-300 rounded text-xs font-bold font-mono text-center text-indigo-950"
+                            />
+                          </div>
+                        )}
+
                         <div className="flex-1">
-                          <label className="text-[10px] font-bold text-slate-600">Unit Price (₹)</label>
+                          <label className="text-[10px] font-bold text-slate-600">
+                            {isCurtainGarment(newItemGarmentName) ? 'Price/Panel (₹)' : 'Unit Price (₹)'}
+                          </label>
                           <input
                             type="text"
                             inputMode="decimal"
@@ -1021,6 +1104,13 @@ export const OrderManagementScreen: React.FC = () => {
                         </div>
                       </div>
                     </div>
+
+                    {isCurtainGarment(newItemGarmentName) && (
+                      <div className="bg-emerald-50 border border-emerald-200 rounded p-2 text-[11px] text-emerald-900 flex items-center justify-between">
+                        <span>Curtain Pricing: {newItemPanels} Panels × ₹{newItemPrice} /panel</span>
+                        <span className="font-bold font-mono">Total: ₹{(newItemPanels * newItemPrice).toFixed(2)}</span>
+                      </div>
+                    )}
 
                     <div className="flex justify-end gap-2 pt-1">
                       <button
@@ -1057,7 +1147,10 @@ export const OrderManagementScreen: React.FC = () => {
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {editItems.map((item, idx) => {
-                        const unitPrice = item.unitPrice || (item.totalItemPrice / (item.quantity || 1));
+                        const isCurtain = item.isCurtain || isCurtainGarment(item.garmentName, item.garmentCode);
+                        const unitPrice = isCurtain 
+                          ? (item.pricePerPanel !== undefined ? item.pricePerPanel : (item.basePrice || 50))
+                          : (item.unitPrice || (item.totalItemPrice / (item.quantity || 1)));
 
                         return (
                           <tr key={item.id || idx} className="hover:bg-slate-50/70">
@@ -1079,6 +1172,13 @@ export const OrderManagementScreen: React.FC = () => {
                                 className="w-full px-1.5 py-1 bg-white border border-slate-300 rounded text-xs font-bold text-slate-800"
                               />
                               <div className="text-[10px] text-slate-400 font-mono">{item.barcode}</div>
+                              {isCurtain && (
+                                <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 font-bold">
+                                    Piece: {item.quantity || 1} • Panel: {item.panelCount !== undefined ? item.panelCount : (item.quantity || 1)}
+                                  </span>
+                                </div>
+                              )}
                             </td>
 
                             {/* Service */}
@@ -1098,33 +1198,91 @@ export const OrderManagementScreen: React.FC = () => {
 
                             {/* Quantity */}
                             <td className="py-2.5 px-3 text-center">
-                              <div className="flex items-center justify-center gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() => handleItemQtyChange(idx, (item.quantity || 1) - 1)}
-                                  className="w-5 h-5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded flex items-center justify-center text-xs"
-                                >
-                                  -
-                                </button>
-                                <input
-                                  type="text"
-                                  inputMode="numeric"
-                                  value={item.quantity || 1}
-                                  onFocus={(e) => e.target.select()}
-                                  onChange={(e) => {
-                                    const cleaned = e.target.value.replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '');
-                                    handleItemQtyChange(idx, cleaned === '' ? 1 : parseInt(cleaned, 10) || 1);
-                                  }}
-                                  className="w-10 text-center font-bold px-1 py-0.5 border border-slate-300 rounded text-xs"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => handleItemQtyChange(idx, (item.quantity || 1) + 1)}
-                                  className="w-5 h-5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded flex items-center justify-center text-xs"
-                                >
-                                  +
-                                </button>
-                              </div>
+                              {isCurtain ? (
+                                <div className="flex flex-col gap-1 items-center">
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-[9px] font-bold text-slate-500 w-10 text-left">Pieces:</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleItemQtyChange(idx, (item.quantity || 1) - 1)}
+                                      className="w-4 h-4 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded flex items-center justify-center text-[10px]"
+                                      title="Decrease pieces"
+                                    >-</button>
+                                    <input
+                                      type="text"
+                                      inputMode="numeric"
+                                      value={item.quantity || 1}
+                                      onFocus={(e) => e.target.select()}
+                                      onChange={(e) => {
+                                        const cleaned = e.target.value.replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '');
+                                        handleItemQtyChange(idx, cleaned === '' ? 1 : parseInt(cleaned, 10) || 1);
+                                      }}
+                                      className="w-8 text-center font-bold px-0.5 py-0.5 border border-slate-300 rounded text-[11px]"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => handleItemQtyChange(idx, (item.quantity || 1) + 1)}
+                                      className="w-4 h-4 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded flex items-center justify-center text-[10px]"
+                                      title="Increase pieces"
+                                    >+</button>
+                                  </div>
+
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-[9px] font-bold text-indigo-700 w-10 text-left">Panels:</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleItemPanelsChange(idx, (item.panelCount !== undefined ? item.panelCount : (item.quantity || 1)) - 1)}
+                                      className="w-4 h-4 bg-indigo-100 hover:bg-indigo-200 text-indigo-900 font-bold rounded flex items-center justify-center text-[10px]"
+                                      title="Decrease total panels"
+                                    >-</button>
+                                    <input
+                                      type="text"
+                                      inputMode="numeric"
+                                      value={item.panelCount !== undefined ? item.panelCount : (item.quantity || 1)}
+                                      onFocus={(e) => e.target.select()}
+                                      onChange={(e) => {
+                                        const cleaned = e.target.value.replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '');
+                                        handleItemPanelsChange(idx, cleaned === '' ? 1 : parseInt(cleaned, 10) || 1);
+                                      }}
+                                      className="w-8 text-center font-bold font-mono px-0.5 py-0.5 border border-indigo-300 rounded text-[11px] text-indigo-950"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => handleItemPanelsChange(idx, (item.panelCount !== undefined ? item.panelCount : (item.quantity || 1)) + 1)}
+                                      className="w-4 h-4 bg-indigo-100 hover:bg-indigo-200 text-indigo-900 font-bold rounded flex items-center justify-center text-[10px]"
+                                      title="Increase total panels"
+                                    >+</button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="flex items-center justify-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleItemQtyChange(idx, (item.quantity || 1) - 1)}
+                                    className="w-5 h-5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded flex items-center justify-center text-xs"
+                                  >
+                                    -
+                                  </button>
+                                  <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    value={item.quantity || 1}
+                                    onFocus={(e) => e.target.select()}
+                                    onChange={(e) => {
+                                      const cleaned = e.target.value.replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '');
+                                      handleItemQtyChange(idx, cleaned === '' ? 1 : parseInt(cleaned, 10) || 1);
+                                    }}
+                                    className="w-10 text-center font-bold px-1 py-0.5 border border-slate-300 rounded text-xs"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleItemQtyChange(idx, (item.quantity || 1) + 1)}
+                                    className="w-5 h-5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded flex items-center justify-center text-xs"
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              )}
                             </td>
 
                             {/* Unit Price */}
@@ -1141,11 +1299,21 @@ export const OrderManagementScreen: React.FC = () => {
                                 }}
                                 className="w-20 text-right font-bold px-1.5 py-1 border border-slate-300 rounded text-xs"
                               />
+                              {isCurtain && (
+                                <div className="text-[10px] text-slate-500 font-mono text-right pt-0.5">/panel</div>
+                              )}
                             </td>
 
                             {/* Total Price */}
-                            <td className="py-2.5 px-3 text-right font-black text-slate-900">
-                              ₹{(Number(item.totalItemPrice) || 0).toFixed(2)}
+                            <td className="py-2.5 px-3 text-right">
+                              <div className="font-black text-slate-900 text-xs">
+                                ₹{(Number(item.totalItemPrice) || 0).toFixed(2)}
+                              </div>
+                              {isCurtain && (
+                                <div className="text-[10px] text-indigo-700 font-mono">
+                                  {item.panelCount !== undefined ? item.panelCount : (item.quantity || 1)} × ₹{item.pricePerPanel || item.basePrice || 50}
+                                </div>
+                              )}
                             </td>
 
                             {/* Delete Item */}
@@ -1241,6 +1409,13 @@ export const OrderManagementScreen: React.FC = () => {
                 {/* Financial Summary & Payment Settlement */}
                 <div className="bg-slate-900 text-white p-4 rounded-lg flex flex-col justify-between space-y-3">
                   <div className="space-y-1.5 border-b border-slate-800 pb-2.5 text-xs">
+                    <div className="flex justify-between text-slate-400">
+                      <span>Total Pieces / Panels:</span>
+                      <span className="font-semibold text-slate-200">
+                        {recalculatedTotals.totalPcs} Pcs{recalculatedTotals.totalPanels > 0 ? ` • ${recalculatedTotals.totalPanels} Panels` : ''}
+                      </span>
+                    </div>
+
                     <div className="flex justify-between text-slate-400">
                       <span>Items Gross Subtotal:</span>
                       <span>₹{recalculatedTotals.gross.toFixed(2)}</span>

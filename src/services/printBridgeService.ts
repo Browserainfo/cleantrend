@@ -12,6 +12,7 @@
  */
 
 import { Order, OrderGarmentItem, BusinessSettings } from '../types';
+import { isCurtainGarment } from '../utils/curtainUtils';
 
 export interface PrinterDevice {
   name: string;
@@ -1012,22 +1013,35 @@ class PrintBridgeService {
                 <th style="text-align: left;">Item & Service</th>
                 <th style="text-align: right;">Amt (Rs)</th>
               </tr>
-              ${order.items.map((it, i) => `
+              ${order.items.map((it, i) => {
+                const isCurtain = it.isCurtain || isCurtainGarment(it.garmentName, it.garmentCode);
+                const pcs = it.quantity || 1;
+                const panels = it.panelCount !== undefined ? it.panelCount : pcs;
+                const rate = it.pricePerPanel || it.basePrice || 50;
+
+                return `
                 <tr>
                   <td style="padding: 2px 0;">
                     <strong>${i + 1}. ${it.garmentName}</strong> (x${it.quantity})
-                    <div style="font-size: 9px; color: #333;">${it.serviceName}</div>
+                    <div style="font-size: 9px; color: #333;">
+                      ${it.serviceName}
+                      ${isCurtain ? `• Piece: ${pcs} | Panel: ${panels} (@ Rs. ${rate}/panel)` : ''}
+                    </div>
                   </td>
                   <td style="text-align: right; vertical-align: top; padding: 2px 0; font-weight: bold;">
-                    ${(it.totalItemPrice * it.quantity).toFixed(2)}
+                    ${(Number(it.totalItemPrice) || 0).toFixed(2)}
                   </td>
                 </tr>
-              `).join('')}
+              `;
+              }).join('')}
             </table>
           </div>
 
           <div class="border-b-solid" style="font-size: 11px;">
-            <div class="flex-between"><span>Total Pieces:</span><strong>${order.totalPieces} Pcs</strong></div>
+            <div class="flex-between">
+              <span>Total Pieces / Panels:</span>
+              <strong>${order.totalPieces} Pcs${order.totalPanels !== undefined && order.totalPanels > 0 ? ` • ${order.totalPanels} Panels` : ''}</strong>
+            </div>
             <div class="flex-between"><span>Gross Amount:</span><span>Rs. ${order.grossAmount.toFixed(2)}</span></div>
             <div class="flex-between bold" style="border-top: 1px solid #000; padding-top: 2px;">
               <span>Net Amount:</span><span>Rs. ${order.netAmount.toFixed(2)}</span>

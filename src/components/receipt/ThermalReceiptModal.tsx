@@ -22,6 +22,7 @@ import { printThermalBookingReceipt } from '../../utils/printUtils';
 import { printBridgeService, BridgeStatus } from '../../services/printBridgeService';
 import { buildOrderWhatsAppMessage } from '../../services/notificationService';
 import { normalizeIndianPhoneNumber } from '../../utils/phoneUtils';
+import { isCurtainGarment } from '../../utils/curtainUtils';
 import { Customer } from '../../types';
 
 export const ThermalReceiptModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
@@ -239,34 +240,50 @@ export const ThermalReceiptModal: React.FC<{ isOpen: boolean; onClose: () => voi
                 <span>Amount</span>
               </div>
 
-              {order.items?.map((item, idx) => (
-                <div key={item.id} className="space-y-0.5">
-                  <div className="flex justify-between font-bold">
-                    <span>{idx + 1}. {item.garmentName}</span>
-                    <span>{(Number(item.totalItemPrice) || 0).toFixed(2)}</span>
-                  </div>
-                  <div className="text-[9.5px] text-slate-700 pl-3 font-semibold">
-                    {item.serviceName}
-                  </div>
-                  {item.remarks && item.remarks.length > 0 && (
-                    <div className="text-[9px] text-slate-500 italic pl-3">
-                      Remarks: {item.remarks.map(r => `- ${r}`).join(' ')}
+              {order.items?.map((item, idx) => {
+                const isCurtain = item.isCurtain || isCurtainGarment(item.garmentName, item.garmentCode);
+                const pcs = item.quantity || 1;
+                const panels = item.panelCount !== undefined ? item.panelCount : pcs;
+                const rate = item.pricePerPanel || item.basePrice || 50;
+
+                return (
+                  <div key={item.id} className="space-y-0.5">
+                    <div className="flex justify-between font-bold">
+                      <span>{idx + 1}. {item.garmentName}</span>
+                      <span>{(Number(item.totalItemPrice) || 0).toFixed(2)}</span>
                     </div>
-                  )}
-                  {item.brand && (
-                    <div className="text-[9px] text-indigo-700 pl-3">
-                      Brand: {item.brand}
+                    <div className="text-[9.5px] text-slate-700 pl-3 font-semibold">
+                      {item.serviceName}
+                      {isCurtain && (
+                        <span className="text-indigo-900 font-mono font-bold block sm:inline sm:ml-1.5">
+                          [Piece: {pcs} • Panel: {panels} @ ₹{rate}/panel]
+                        </span>
+                      )}
                     </div>
-                  )}
-                </div>
-              ))}
+                    {item.remarks && item.remarks.length > 0 && (
+                      <div className="text-[9px] text-slate-500 italic pl-3">
+                        Remarks: {item.remarks.map(r => `- ${r}`).join(' ')}
+                      </div>
+                    )}
+                    {item.brand && (
+                      <div className="text-[9px] text-indigo-700 pl-3">
+                        Brand: {item.brand}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
             {/* Financial Summary */}
             <div className="space-y-1 text-[10px] border-b border-slate-800 pb-2">
               <div className="flex justify-between text-slate-600">
-                <span>Total Pieces / Weight:</span>
-                <span className="font-bold">{order.totalPieces || (order.items ? order.items.reduce((s, i) => s + (i.quantity || 1), 0) : 1)} Pcs {order.totalWeightKg ? `(${order.totalWeightKg} kg)` : ''}</span>
+                <span>Total Pieces / Panels:</span>
+                <span className="font-bold">
+                  {order.totalPieces || (order.items ? order.items.reduce((s, i) => s + (i.quantity || 1), 0) : 1)} Pcs
+                  {order.totalPanels !== undefined && order.totalPanels > 0 ? ` • ${order.totalPanels} Panels` : ''}
+                  {order.totalWeightKg ? ` (${order.totalWeightKg} kg)` : ''}
+                </span>
               </div>
               <div className="flex justify-between text-slate-600">
                 <span>Items Subtotal:</span>
